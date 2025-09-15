@@ -550,7 +550,7 @@ def main():
                                    size='Length (bp)', color='Strand',
                                    title="Open Reading Frames Distribution",
                                    hover_data=['Frame'])
-                    st.plotly_chart(fig)
+                    st.plotly_chart(fig, key=f'orf_distribution_{seq_idx}')
                     
                     # Show largest ORF details
                     if orfs:
