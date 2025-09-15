@@ -13,6 +13,8 @@ from typing import Dict, List, Tuple, Optional
 import hashlib
 import google.generativeai as genai
 import base64
+import py3Dmol
+import streamlit.components.v1 as components
 
 # Configure page
 st.set_page_config(
@@ -28,9 +30,9 @@ st.markdown("""
     .main-header {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         padding: 2rem;
-        border-radius: 15px;
+        border-radius: 20px;
         text-align: center;
-        margin-bottom: 2rem;
+        margin-bottom: 2.5rem;
         color: white;
         box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3);
     }
@@ -354,6 +356,93 @@ class DNAAnalyzer:
             }
         }
 
+    def _score_guide_rna(self, guide_seq: str, full_sequence: str) -> Dict:
+        """Scores a guide RNA based on on-target and off-target metrics."""
+        score = 100.0
+        
+        # 1. GC content (ideal 40-60%)
+        gc_content = (guide_seq.count('G') + guide_seq.count('C')) / len(guide_seq) * 100
+        if not 40 <= gc_content <= 60:
+            score -= abs(gc_content - 50)  # Penalize deviation from 50%
+        
+        # 2. Poly-T termination signal (bad)
+        if 'TTTT' in guide_seq:
+            score -= 40
+            
+        # 3. On-target score (simple heuristic: GC clamp at the end is good)
+        if guide_seq.endswith('G'):
+            score += 10
+            
+        # 4. Off-target score (simple version: count exact matches elsewhere)
+        # A real tool would use BLAST or allow mismatches.
+        off_target_hits = full_sequence.count(guide_seq) - 1
+        score -= off_target_hits * 10 # Penalize each off-target hit
+        
+        return {
+            'gc_content': gc_content,
+            'on_target_score': max(0, min(100, score)),
+            'off_target_hits': off_target_hits
+        }
+
+    def design_crispr_guides(self, sequence: str) -> List[Dict]:
+        """Design and score guide RNAs for CRISPR/Cas9."""
+        guides = []
+        pam = 'GG' # We look for NGG
+        
+        # Search forward strand
+        for match in re.finditer(pam, sequence):
+            pam_start = match.start()
+            if pam_start >= 21: # Need 20nt guide + 1nt N
+                guide_start = pam_start - 21
+                guide_seq = sequence[guide_start:guide_start+20]
+                
+                scores = self._score_guide_rna(guide_seq, sequence)
+                overall_score = scores['on_target_score']
+                
+                if overall_score > 50: # Filter for decent guides
+                    guides.append({
+                        'sequence': guide_seq,
+                        'location': guide_start,
+                        'pam_location': pam_start,
+                        'strand': '+',
+                        'gc_content': scores['gc_content'],
+                        'on_target_score': scores['on_target_score'],
+                        'off_target_hits': scores['off_target_hits'],
+                        'overall_score': overall_score
+                    })
+
+        # Search reverse strand
+        rev_comp = self.reverse_complement(sequence)
+        for match in re.finditer(pam, rev_comp):
+            pam_start_rev = match.start()
+            if pam_start_rev >= 21:
+                guide_start_rev = pam_start_rev - 21
+                guide_seq_rev = rev_comp[guide_start_rev:guide_start_rev+20]
+                
+                # Guide sequence should be reported as it appears on the forward strand
+                guide_seq_fwd = self.reverse_complement(guide_seq_rev)
+                
+                scores = self._score_guide_rna(guide_seq_rev, rev_comp)
+                overall_score = scores['on_target_score']
+                
+                if overall_score > 50:
+                    # Location on forward strand
+                    fwd_location = len(sequence) - (guide_start_rev + 20)
+                    guides.append({
+                        'sequence': guide_seq_fwd,
+                        'location': fwd_location,
+                        'pam_location': len(sequence) - pam_start_rev,
+                        'strand': '-',
+                        'gc_content': scores['gc_content'],
+                        'on_target_score': scores['on_target_score'],
+                        'off_target_hits': scores['off_target_hits'],
+                        'overall_score': overall_score
+                    })
+        
+        # Sort by overall score
+        guides.sort(key=lambda x: x['overall_score'], reverse=True)
+        return guides
+
     def evolutionary_analysis(self, sequence: str) -> Dict:
         """Perform evolutionary analysis"""
         # Calculate mutation hotspots
@@ -406,6 +495,47 @@ class DNAAnalyzer:
             'pharmacogenomic_score': len(drug_targets) * 25
         }
 
+    def generate_pdb_from_structure(self, protein_sequence: str, structure_sequence: str) -> str:
+        """Generates a simulated PDB file string from a protein and its secondary structure."""
+        pdb_lines = []
+        atom_index = 1
+        residue_index = 1
+        x, y, z = 0.0, 0.0, 0.0
+        
+        # Helix parameters
+        helix_radius = 2.5
+        helix_pitch = 1.5 # Rise per residue
+        
+        # Sheet parameters
+        sheet_step = 3.5
+        
+        for aa, struct in zip(protein_sequence, structure_sequence):
+            if aa == '*': continue # Skip stop codons
+            
+            res_name = self.amino_acids.get(aa, "UNK").upper()[:3]
+            
+            pdb_line = f"ATOM  {atom_index:5d}  CA  {res_name} A{residue_index:4d}    {x:8.3f}{y:8.3f}{z:8.3f}  1.00  0.00           C  "
+            pdb_lines.append(pdb_line)
+            
+            if struct == 'H': # Helix
+                angle = (residue_index % 4) * (np.pi / 2) # simplified turn
+                x += helix_pitch
+                y = helix_radius * np.cos(angle)
+                z = helix_radius * np.sin(angle)
+            elif struct == 'S': # Sheet
+                x += sheet_step * 0.8
+                y += (residue_index % 2 - 0.5) * 2 * sheet_step * 0.2 # Zig-zag
+            else: # Coil
+                # Random walk
+                x += np.random.uniform(-1.5, 1.5)
+                y += np.random.uniform(-1.5, 1.5)
+                z += np.random.uniform(-1.5, 1.5)
+            
+            atom_index += 1
+            residue_index += 1
+            
+        return "\n".join(pdb_lines)
+
 def create_sequence_visualization(sequence: str, max_length: int = 200) -> str:
     """Create formatted sequence visualization"""
     if len(sequence) <= max_length:
@@ -445,6 +575,20 @@ def visualize_protein_structure(structure_sequence: str) -> str:
     </div>
     """
     return html
+
+def render_3d_protein_structure(pdb_string: str, width: int = 500, height: int = 400):
+    """Renders a 3D protein structure using py3Dmol."""
+    view = py3Dmol.view(width=width, height=height)
+    view.addModel(pdb_string, 'pdb')
+    
+    # Style the protein
+    view.setStyle({'cartoon': {'color': 'spectrum'}})
+    
+    # Zoom to fit the structure
+    view.zoomTo()
+    
+    # Render the view to HTML
+    components.html(view.render(), height=height, width=width)
 
 def get_gemini_insights(api_key: str, analysis_summary: Dict) -> List[str]:
     """Generate insights using Gemini AI"""
@@ -489,8 +633,8 @@ def main():
     st.markdown("""
     <div class="main-header">
         <h1>🧬 EternaSeq</h1>
-        <h2>Revolutionary DNA Sequence Intelligence Platform</h2>
-        <p>Upload any organism's DNA sequence → Get Nobel Prize-level genomic insights</p>
+        <h2>The Nobel Prize-Winning Genomic Discovery Engine</h2>
+        <p>Unlock groundbreaking biological discoveries from any DNA sequence. Your next Nobel Prize starts here.</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -560,6 +704,7 @@ def main():
                 species_scores = analyzer.species_classification(sequence)
                 evo_analysis = analyzer.evolutionary_analysis(sequence)
                 pharma_analysis = analyzer.pharmacogenomics_analysis(sequence)
+                crispr_guides = analyzer.design_crispr_guides(sequence)
                 
                 # Metrics for advanced tab
                 entropy = -sum(p * np.log2(p) for p in [sequence.count(n)/len(sequence) for n in 'ATCG'] if p > 0)
@@ -593,9 +738,9 @@ def main():
                 st.metric("Complexity", "High" if len(set(sequence)) == 4 else "Medium")
 
             # Create tabs for different analyses
-            tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+            tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
                 "🧬 Sequence Analysis", "🔍 Gene Identification", "🧪 Protein Prediction", 
-                "🌿 Species Classification", "⚗️ Drug Targets", "🔬 Advanced Analysis"
+                "🌿 Species Classification", "⚗️ Drug Targets", "🔬 Advanced Analysis", "✂️ Gene Editing (CRISPR)"
             ])
 
             with tab1:
@@ -701,11 +846,11 @@ def main():
                             st.warning(f"Could not analyze protein from ORF_{i+1}: {protein_analysis['error']}")
                             continue
 
-                        col1, col2 = st.columns([1, 2])
+                        col1, col2 = st.columns(2)
                         
                         with col1:
                             st.metric("Protein Length", f"{protein_analysis['length']} aa")
-                            st.metric("Est. Mol. Weight", f"{protein_analysis['molecular_weight']:,} Da")
+                            st.metric("Est. Mol. Weight", f"{int(protein_analysis['molecular_weight']):,} Da")
                             
                             st.markdown("**Predicted Domains:**")
                             if protein_analysis['predicted_domains']:
@@ -720,10 +865,19 @@ def main():
                             st.write(f"Sheet: {summary['sheet_percent']:.1f}%")
                             st.write(f"Coil: {summary['coil_percent']:.1f}%")
 
-                        with col2:
                             st.markdown("**Predicted 2D Structure Map:**")
                             structure_viz = visualize_protein_structure(protein_analysis['secondary_structure_sequence'])
                             st.markdown(structure_viz, unsafe_allow_html=True)
+
+                        with col2:
+                            st.markdown("**Interactive 3D Structure (Simulated):**")
+                            pdb_string = analyzer.generate_pdb_from_structure(
+                                orf['protein_sequence'], protein_analysis['secondary_structure_sequence']
+                            )
+                            if pdb_string:
+                                render_3d_protein_structure(pdb_string)
+                            else:
+                                st.warning("Could not generate 3D structure.")
 
                         # Amino acid composition chart
                         if protein_analysis['composition']:
@@ -849,6 +1003,44 @@ def main():
                     for insight in insights:
                         st.info(f"💡 {insight}")
 
+            with tab7:
+                st.subheader("✂️ CRISPR/Cas9 Guide RNA Design")
+                
+                if crispr_guides:
+                    st.success(f"✅ Found {len(crispr_guides)} potential gRNA candidates for gene editing.")
+                    
+                    guide_df = pd.DataFrame(crispr_guides)
+                    
+                    # Display table
+                    st.markdown("#### Top gRNA Candidates (ranked by score)")
+                    st.dataframe(guide_df[[
+                        'sequence', 'location', 'strand', 'gc_content', 
+                        'on_target_score', 'off_target_hits', 'overall_score'
+                    ]].rename(columns={
+                        'sequence': 'Guide Sequence (20nt)',
+                        'location': 'Start Position',
+                        'strand': 'Strand',
+                        'gc_content': 'GC %',
+                        'on_target_score': 'On-Target Score',
+                        'off_target_hits': 'Off-Target Hits',
+                        'overall_score': 'Overall Score'
+                    }).style.format({'GC %': '{:.1f}', 'On-Target Score': '{:.1f}', 'Overall Score': '{:.1f}'}))
+                    
+                    # Visualization of guide locations
+                    st.markdown("#### gRNA Location on Genome")
+                    fig = px.scatter(guide_df.head(20), x='location', y='overall_score', 
+                                   color='strand', size='on_target_score',
+                                   title="Top 20 gRNA Candidates by Location and Score",
+                                   hover_data=['sequence'],
+                                   labels={'location': 'Position on Sequence', 'overall_score': 'Overall Score'})
+                    fig.update_layout(xaxis_range=[0, len(sequence)])
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    st.info("💡 **On-Target Score:** A heuristic score based on GC content and sequence features. Higher is better.  \n**Off-Target Hits:** Number of identical sequences found elsewhere. Lower is better.")
+                    
+                else:
+                    st.warning("No suitable CRISPR gRNA targets found based on current criteria (PAM: NGG).")
+
         # Generate comprehensive report
         st.markdown("---")
         st.header("📊 Comprehensive Analysis Report")
@@ -867,7 +1059,8 @@ def main():
                 'genes_identified': len(genes_found),
                 'species_classification': species_scores,
                 'evolutionary_analysis': evo_analysis,
-                'pharmacogenomics': pharma_analysis
+                'pharmacogenomics': pharma_analysis,
+                'crispr_guides_found': len(crispr_guides)
             }
             
             report_json = json.dumps(report, indent=2)
@@ -890,6 +1083,7 @@ def main():
             • **Species Classification:** {list(species_scores.keys())[0].title() if species_scores else 'Unknown'}
             • **Conservation Score:** {evo_analysis['conservation_score']:.0f}/100
             • **Clinical Relevance:** {pharma_analysis['pharmacogenomic_score']}/100
+            • **CRISPR Targets:** {len(crispr_guides)} potential gRNA sites identified
             
             This comprehensive analysis provides unprecedented insights into the genomic sequence,
             combining traditional bioinformatics with AI-powered pattern recognition for 
