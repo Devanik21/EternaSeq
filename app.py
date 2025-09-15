@@ -300,27 +300,43 @@ class DNAAnalyzer:
         return species_scores
 
     def predict_protein_structure(self, protein_sequence: str) -> Dict:
-        """Predict protein structure and properties"""
-        if not protein_sequence or protein_sequence.count('*') > 0:
-            return {'error': 'Invalid protein sequence'}
+        """Predict protein structure and properties (simulated)"""
+        # Remove stop codon if present
+        protein_sequence = protein_sequence.replace('*', '')
+
+        if not protein_sequence:
+            return {'error': 'Invalid or empty protein sequence'}
         
         # Amino acid composition
         aa_composition = Counter(protein_sequence)
         
-        # Predict secondary structure (simplified)
-        alpha_helix_residues = ['A', 'E', 'L', 'M']
-        beta_sheet_residues = ['F', 'I', 'Y', 'V']
+        # Predict secondary structure (simplified simulation)
+        structure_seq = []
+        for aa in protein_sequence:
+            # Assign structure based on amino acid properties (simplified)
+            if aa in ['A', 'E', 'L', 'M', 'Q', 'K', 'R', 'H']: # Helix formers
+                structure_seq.append('H')
+            elif aa in ['F', 'I', 'Y', 'V', 'W', 'T', 'C']: # Sheet formers
+                structure_seq.append('S')
+            else: # Coil/turn formers
+                structure_seq.append('C')
         
-        helix_score = sum(aa_composition.get(aa, 0) for aa in alpha_helix_residues)
-        sheet_score = sum(aa_composition.get(aa, 0) for aa in beta_sheet_residues)
+        # Smooth the structure to create longer segments
+        smoothed_structure = list(structure_seq)
+        for i in range(1, len(smoothed_structure) - 1):
+            if smoothed_structure[i-1] == smoothed_structure[i+1]:
+                smoothed_structure[i] = smoothed_structure[i-1]
         
-        # Predict domains
+        # Predict domains based on structure
         domains = []
-        if len(protein_sequence) > 50:
-            if helix_score > sheet_score:
-                domains.append('Transmembrane domain')
-            else:
-                domains.append('Catalytic domain')
+        if 'HHHHH' in "".join(smoothed_structure):
+            domains.append('Alpha-Helix Rich')
+        if 'SSSSS' in "".join(smoothed_structure):
+            domains.append('Beta-Sheet Rich')
+        if len(protein_sequence) > 100 and 'C'*10 in "".join(smoothed_structure):
+            domains.append('Disordered Region')
+        if not domains:
+            domains.append('Mixed Alpha/Beta')
         
         # Calculate properties
         molecular_weight = len(protein_sequence) * 110  # Average MW per residue
@@ -330,9 +346,11 @@ class DNAAnalyzer:
             'composition': dict(aa_composition),
             'molecular_weight': molecular_weight,
             'predicted_domains': domains,
-            'secondary_structure': {
-                'helix_propensity': helix_score / len(protein_sequence) if len(protein_sequence) > 0 else 0,
-                'sheet_propensity': sheet_score / len(protein_sequence) if len(protein_sequence) > 0 else 0
+            'secondary_structure_sequence': "".join(smoothed_structure),
+            'secondary_structure_summary': {
+                'helix_percent': smoothed_structure.count('H') / len(smoothed_structure) * 100 if smoothed_structure else 0,
+                'sheet_percent': smoothed_structure.count('S') / len(smoothed_structure) * 100 if smoothed_structure else 0,
+                'coil_percent': smoothed_structure.count('C') / len(smoothed_structure) * 100 if smoothed_structure else 0,
             }
         }
 
@@ -406,6 +424,28 @@ def create_sequence_visualization(sequence: str, max_length: int = 200) -> str:
     
     return formatted
 
+def visualize_protein_structure(structure_sequence: str) -> str:
+    """Create an HTML visualization of the protein secondary structure."""
+    html = "<div style='font-family: monospace; line-height: 20px; word-wrap: break-word;'>"
+    color_map = {
+        'H': '#FF6B6B', # Helix - red
+        'S': '#4ECDC4', # Sheet - teal
+        'C': '#45B7D1'  # Coil - blue
+    }
+    for element in structure_sequence:
+        html += f"<span style='display: inline-block; width: 12px; height: 12px; background-color: {color_map.get(element, '#ccc')}; border-radius: 2px; margin: 1px;' title='{element}'></span>"
+    html += "</div>"
+    
+    # Add a legend
+    html += """
+    <div style='margin-top: 10px; font-size: 12px;'>
+        <span style='display: inline-block; width: 10px; height: 10px; background-color: #FF6B6B; margin-right: 5px;'></span> Helix (H)
+        <span style='display: inline-block; width: 10px; height: 10px; background-color: #4ECDC4; margin-left: 10px; margin-right: 5px;'></span> Sheet (S)
+        <span style='display: inline-block; width: 10px; height: 10px; background-color: #45B7D1; margin-left: 10px; margin-right: 5px;'></span> Coil (C)
+    </div>
+    """
+    return html
+
 def get_gemini_insights(api_key: str, analysis_summary: Dict) -> List[str]:
     """Generate insights using Gemini AI"""
     if not api_key:
@@ -413,7 +453,7 @@ def get_gemini_insights(api_key: str, analysis_summary: Dict) -> List[str]:
     
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash-latest')
         
         # Create a detailed prompt
         prompt = f"""
@@ -652,34 +692,48 @@ def main():
                 if orfs:
                     # Analyze proteins from ORFs
                     for i, orf in enumerate(orfs[:3]):  # Top 3 ORFs
-                        st.markdown(f"**Protein from ORF_{i+1}**")
+                        st.markdown(f"---")
+                        st.markdown(f"#### 🔬 Analysis for Protein from ORF_{i+1}")
                         
                         protein_analysis = analyzer.predict_protein_structure(orf['protein_sequence'])
                         
-                        if 'error' not in protein_analysis:
-                            col1, col2 = st.columns(2)
-                            
-                            with col1:
-                                st.write(f"• Length: {protein_analysis['length']} amino acids")
-                                st.write(f"• Molecular Weight: {protein_analysis['molecular_weight']:,} Da")
-                                st.write(f"• Helix Propensity: {protein_analysis['secondary_structure']['helix_propensity']:.2f}")
-                                st.write(f"• Sheet Propensity: {protein_analysis['secondary_structure']['sheet_propensity']:.2f}")
-                            
-                            with col2:
-                                if protein_analysis['predicted_domains']:
-                                    st.write("**Predicted Domains:**")
-                                    for domain in protein_analysis['predicted_domains']:
-                                        st.markdown(f'<span class="protein-structure">{domain}</span>', unsafe_allow_html=True)
-                            
-                            # Amino acid composition
-                            if protein_analysis['composition']:
-                                aa_df = pd.DataFrame(list(protein_analysis['composition'].items()), 
-                                                   columns=['Amino Acid', 'Count'])
-                                fig = px.bar(aa_df, x='Amino Acid', y='Count', 
-                                           title=f"Amino Acid Composition - ORF_{i+1}")
-                                st.plotly_chart(fig, key=f'comp_distribution_{seq_idx}')
+                        if 'error' in protein_analysis:
+                            st.warning(f"Could not analyze protein from ORF_{i+1}: {protein_analysis['error']}")
+                            continue
+
+                        col1, col2 = st.columns([1, 2])
                         
-                        st.markdown("---")
+                        with col1:
+                            st.metric("Protein Length", f"{protein_analysis['length']} aa")
+                            st.metric("Est. Mol. Weight", f"{protein_analysis['molecular_weight']:,} Da")
+                            
+                            st.markdown("**Predicted Domains:**")
+                            if protein_analysis['predicted_domains']:
+                                for domain in protein_analysis['predicted_domains']:
+                                    st.markdown(f'<span class="protein-structure">{domain}</span>', unsafe_allow_html=True)
+                            else:
+                                st.write("None predicted.")
+
+                            st.markdown("**Secondary Structure:**")
+                            summary = protein_analysis['secondary_structure_summary']
+                            st.write(f"Helix: {summary['helix_percent']:.1f}%")
+                            st.write(f"Sheet: {summary['sheet_percent']:.1f}%")
+                            st.write(f"Coil: {summary['coil_percent']:.1f}%")
+
+                        with col2:
+                            st.markdown("**Predicted 2D Structure Map:**")
+                            structure_viz = visualize_protein_structure(protein_analysis['secondary_structure_sequence'])
+                            st.markdown(structure_viz, unsafe_allow_html=True)
+
+                        # Amino acid composition chart
+                        if protein_analysis['composition']:
+                            aa_df = pd.DataFrame(list(protein_analysis['composition'].items()), 
+                                               columns=['Amino Acid', 'Count'])
+                            fig = px.bar(aa_df.sort_values('Count', ascending=False), x='Amino Acid', y='Count', 
+                                       title=f"Amino Acid Composition - ORF_{i+1}")
+                            st.plotly_chart(fig, use_container_width=True, key=f'aa_comp_{seq_idx}_{i}')
+                else:
+                    st.info("No Open Reading Frames found to predict protein structures.")
 
             with tab4:
                 st.subheader("🌿 Species Classification & Phylogenetics")
