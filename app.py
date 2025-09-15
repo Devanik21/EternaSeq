@@ -11,6 +11,7 @@ import json
 from datetime import datetime
 from typing import Dict, List, Tuple, Optional
 import hashlib
+import google.generativeai as genai
 import base64
 
 # Configure page
@@ -405,6 +406,44 @@ def create_sequence_visualization(sequence: str, max_length: int = 200) -> str:
     
     return formatted
 
+def get_gemini_insights(api_key: str, analysis_summary: Dict) -> List[str]:
+    """Generate insights using Gemini AI"""
+    if not api_key:
+        return ["Please enter a Google AI API Key in the sidebar to generate AI insights."]
+    
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        
+        # Create a detailed prompt
+        prompt = f"""
+        You are a world-class geneticist and bioinformatician. Analyze the following DNA sequence summary and provide 4-5 deep, insightful conclusions for a genomics researcher. Be concise, use scientific language, and format your output as a bulleted list (using '*' for bullets).
+
+        **Sequence Summary:**
+        - **Length:** {analysis_summary['length']} bp
+        - **GC Content:** {analysis_summary['gc_content']:.1f}%
+        - **Identified ORFs:** {analysis_summary['orfs_count']}
+        - **Largest ORF:** {analysis_summary['largest_orf_bp']} bp (protein: {analysis_summary['largest_orf_aa']} aa)
+        - **Potential Genes Found:** {analysis_summary['genes_found']}
+        - **Predicted Species:** {analysis_summary['predicted_species']} ({analysis_summary['species_confidence']:.0f}% confidence)
+        - **Evolutionary Conservation Score:** {analysis_summary['conservation_score']:.0f}/100 (Rate: {analysis_summary['evolutionary_rate']})
+        - **Pharmacogenomic Relevance:** {analysis_summary['pharma_score']}/100, Targets: {analysis_summary['pharma_targets']}
+        - **Shannon Entropy:** {analysis_summary['entropy']:.3f}
+
+        **Your Insights (as a bulleted list):**
+        """
+        
+        response = model.generate_content(prompt)
+        
+        # Clean up the response
+        insights = response.text.strip().split('\n')
+        cleaned_insights = [re.sub(r'^\s*[\*\-]\s*', '', i).strip() for i in insights if i.strip()]
+        return cleaned_insights
+
+    except Exception as e:
+        st.error(f"Gemini API Error: {e}")
+        return ["Could not generate AI insights. Please check your API key and network connection."]
+
 def main():
     # App header
     st.markdown("""
@@ -414,6 +453,10 @@ def main():
         <p>Upload any organism's DNA sequence → Get Nobel Prize-level genomic insights</p>
     </div>
     """, unsafe_allow_html=True)
+
+    # Sidebar for API Key
+    st.sidebar.header("💎 Gemini AI Integration")
+    api_key = st.sidebar.text_input("Enter your Google AI API Key", type="password", help="Get your key from https://aistudio.google.com/app/apikey")
 
     # File upload section
     st.header("📁 DNA Sequence Upload")
@@ -466,17 +509,45 @@ def main():
             sequence = seq_data['sequence']
             class_label = seq_data['class']
             
+            # =================================================================
+            # == Perform all analyses once before rendering tabs for efficiency ==
+            # =================================================================
+            with st.spinner(f"🔬 Analyzing Sequence {seq_idx + 1}... This may take a moment."):
+                composition = analyzer.analyze_composition(sequence)
+                gc_content = composition['gc_content']
+                orfs = analyzer.find_orfs(sequence)
+                genes_found = analyzer.identify_genes(sequence)
+                species_scores = analyzer.species_classification(sequence)
+                evo_analysis = analyzer.evolutionary_analysis(sequence)
+                pharma_analysis = analyzer.pharmacogenomics_analysis(sequence)
+                
+                # Metrics for advanced tab
+                entropy = -sum(p * np.log2(p) for p in [sequence.count(n)/len(sequence) for n in 'ATCG'] if p > 0)
+                words_3 = [sequence[i:i+3] for i in range(len(sequence)-2)]
+                unique_3mers = len(set(words_3))
+                
+                max_repeat = 0
+                if sequence:
+                    current_repeat = 1
+                    max_repeat = 1
+                    for i in range(1, len(sequence)):
+                        if sequence[i] == sequence[i-1]:
+                            current_repeat += 1
+                        else:
+                            max_repeat = max(max_repeat, current_repeat)
+                            current_repeat = 1
+                    max_repeat = max(max_repeat, current_repeat)
+
             st.markdown(f"---")
             st.header(f"🔬 Analysis Results - Sequence {seq_idx + 1}")
             
             # Basic sequence info
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("Sequence Length", f"{len(sequence):,} bp")
+                st.metric("Sequence Length", f"{composition['length']:,} bp")
             with col2:
                 st.metric("Class Label", class_label)
             with col3:
-                gc_content = (sequence.count('G') + sequence.count('C')) / len(sequence) * 100
                 st.metric("GC Content", f"{gc_content:.1f}%")
             with col4:
                 st.metric("Complexity", "High" if len(set(sequence)) == 4 else "Medium")
@@ -489,9 +560,6 @@ def main():
 
             with tab1:
                 st.subheader("📊 Nucleotide Composition Analysis")
-                
-                # Composition analysis
-                composition = analyzer.analyze_composition(sequence)
                 
                 # Composition chart
                 comp_df = pd.DataFrame(list(composition['composition'].items()), columns=['Nucleotide', 'Count'])
@@ -516,16 +584,12 @@ def main():
                 with col2:
                     st.markdown("**Sequence Quality**")
                     quality_score = 85 + (composition['gc_content'] - 50) if 40 <= composition['gc_content'] <= 60 else 70
-                    st.write(f"• Quality Score: {quality_score:.0f}/100")
+                    st.write(f"• Quality Score: {min(99, quality_score):.0f}/100")
                     st.write(f"• Complexity: {'High' if len(set(sequence)) == 4 else 'Medium'}")
-                    st.write(f"• Length Class: {'Long' if len(sequence) > 1000 else 'Short'}")
+                    st.write(f"• Length Class: {'Long' if composition['length'] > 1000 else 'Short'}")
 
             with tab2:
                 st.subheader("🎯 Gene Identification & ORF Analysis")
-                
-                # Find ORFs
-                orfs = analyzer.find_orfs(sequence)
-                
                 if orfs:
                     st.success(f"🔍 Found {len(orfs)} Open Reading Frames")
                     
@@ -570,8 +634,6 @@ def main():
                             st.write(f"**Est. Molecular Weight:** {protein_mw:,} Da")
                             st.write(f"**Type:** {'Membrane protein' if protein_mw > 30000 else 'Cytoplasmic protein'}")
                 
-                # Gene identification
-                genes_found = analyzer.identify_genes(sequence)
                 if genes_found:
                     st.subheader("🧬 Potential Gene Matches")
                     for gene in genes_found:
@@ -622,8 +684,6 @@ def main():
             with tab4:
                 st.subheader("🌿 Species Classification & Phylogenetics")
                 
-                species_scores = analyzer.species_classification(sequence)
-                
                 if species_scores:
                     # Species probability
                     species_df = pd.DataFrame(list(species_scores.items()), 
@@ -641,9 +701,6 @@ def main():
                     
                     st.success(f"🎯 **Most likely species:** {top_species['Species'].title()} ({confidence:.0f}% confidence)")
                 
-                # Evolutionary analysis
-                evo_analysis = analyzer.evolutionary_analysis(sequence)
-                
                 col1, col2 = st.columns(2)
                 with col1:
                     st.metric("Conservation Score", f"{evo_analysis['conservation_score']:.0f}/100")
@@ -657,8 +714,6 @@ def main():
 
             with tab5:
                 st.subheader("⚗️ Pharmacogenomics & Drug Targets")
-                
-                pharma_analysis = analyzer.pharmacogenomics_analysis(sequence)
                 
                 if pharma_analysis['drug_targets']:
                     st.write(f"**Pharmacogenomic Score:** {pharma_analysis['pharmacogenomic_score']}/100")
@@ -684,17 +739,8 @@ def main():
                 with col1:
                     st.markdown("**🧬 Genomic Complexity Metrics**")
                     
-                    # Calculate complexity metrics
-                    entropy = -sum(p * np.log2(p) for p in [sequence.count(n)/len(sequence) for n in 'ATCG'] if p > 0)
                     st.write(f"• Shannon Entropy: {entropy:.3f}")
-                    
-                    # Linguistic complexity
-                    words_3 = [sequence[i:i+3] for i in range(len(sequence)-2)]
-                    unique_3mers = len(set(words_3))
                     st.write(f"• 3-mer Diversity: {unique_3mers}")
-                    
-                    # Repetitive elements
-                    max_repeat = max([len(sequence.split(n)[0]) for n in 'ATCG'] + [0])
                     st.write(f"• Max Homopolymer: {max_repeat}")
                 
                 with col2:
@@ -719,15 +765,35 @@ def main():
                 # Generate AI insights
                 st.subheader("🤖 AI-Generated Insights")
                 
-                insights = [
-                    f"This {len(sequence)}-nucleotide sequence shows characteristics of {'mitochondrial' if 'ATG' in sequence[:50] else 'nuclear'} DNA",
-                    f"The GC content of {gc_content:.1f}% suggests {'gene-rich' if gc_content > 50 else 'gene-poor'} genomic region",
-                    f"Identified {len(orfs)} potential protein-coding regions with significant biological relevance",
-                    f"Evolutionary conservation analysis indicates {'high' if evo_analysis['conservation_score'] > 80 else 'moderate'} selective pressure"
-                ]
-                
-                for insight in insights:
-                    st.info(f"💡 {insight}")
+                with st.spinner("🧠 Consulting Gemini for deep insights..."):
+                    # Prepare summary for Gemini
+                    top_species_name = "Unknown"
+                    top_species_prob = 0
+                    if species_scores:
+                        top_species_df = pd.DataFrame(list(species_scores.items()), columns=['Species', 'Probability']).sort_values('Probability', ascending=False)
+                        if not top_species_df.empty:
+                            top_species_name = top_species_df.iloc[0]['Species'].title()
+                            top_species_prob = top_species_df.iloc[0]['Probability'] * 100
+
+                    analysis_summary = {
+                        'length': len(sequence),
+                        'gc_content': gc_content,
+                        'orfs_count': len(orfs),
+                        'largest_orf_bp': orfs[0]['length'] if orfs else 0,
+                        'largest_orf_aa': orfs[0]['protein_length'] if orfs else 0,
+                        'genes_found': ', '.join([g['name'] for g in genes_found]) if genes_found else 'None',
+                        'predicted_species': top_species_name,
+                        'species_confidence': top_species_prob,
+                        'conservation_score': evo_analysis['conservation_score'],
+                        'evolutionary_rate': evo_analysis['evolutionary_rate'],
+                        'pharma_score': pharma_analysis['pharmacogenomic_score'],
+                        'pharma_targets': ', '.join([t['target'] for t in pharma_analysis['drug_targets']]) if pharma_analysis['drug_targets'] else 'None',
+                        'entropy': entropy,
+                    }
+                    
+                    insights = get_gemini_insights(api_key, analysis_summary)
+                    for insight in insights:
+                        st.info(f"💡 {insight}")
 
         # Generate comprehensive report
         st.markdown("---")
