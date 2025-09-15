@@ -615,7 +615,7 @@ def main():
                                                    columns=['Amino Acid', 'Count'])
                                 fig = px.bar(aa_df, x='Amino Acid', y='Count', 
                                            title=f"Amino Acid Composition - ORF_{i+1}")
-                                st.plotly_chart(fig)
+                                st.plotly_chart(fig, key=f'comp_distribution_{seq_idx}')
                         
                         st.markdown("---")
 
