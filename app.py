@@ -587,9 +587,15 @@ def render_3d_protein_structure(pdb_string: str, width: int = 500, height: int =
     # Zoom to fit the structure
     view.zoomTo()
     
-    # Render the view to HTML
-    # FIX: Explicitly cast height and width to int to prevent a TypeError.
-    components.html(view.to_html(), height=int(height), width=int(width))
+    # Generate the HTML for the viewer
+    html_output = view.to_html()
+    
+    # FIX: Ensure the generated HTML is a valid string before rendering.
+    # This prevents a TypeError if py3Dmol returns None or an empty object.
+    if html_output:
+        components.html(html_output, height=int(height), width=int(width))
+    else:
+        st.warning("Could not generate a 3D visualization for this structure.")
 
 def get_gemini_insights(api_key: str, analysis_summary: Dict) -> List[str]:
     """Generate insights using Gemini AI"""
