@@ -633,7 +633,7 @@ def main():
                     fig = px.bar(species_df, x='Species', y='Probability',
                                title="Species Classification Probability",
                                color='Probability', color_continuous_scale='viridis')
-                    st.plotly_chart(fig)
+                    st.plotly_chart(fig,key='hvd878dvy')
                     
                     # Top classification
                     top_species = species_df.iloc[0]
