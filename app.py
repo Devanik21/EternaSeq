@@ -498,7 +498,7 @@ def main():
                 fig = px.pie(comp_df, values='Count', names='Nucleotide', 
                            title="Nucleotide Distribution",
                            color_discrete_map={'A':'#FF6B6B', 'T':'#4ECDC4', 'G':'#45B7D1', 'C':'#96CEB4'})
-                st.plotly_chart(fig)
+                st.plotly_chart(fig, key=f'piE_distribution_{seq_idx}')
                 
                 # Sequence visualization
                 st.subheader("🔤 Sequence Visualization")
