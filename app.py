@@ -588,7 +588,7 @@ def render_3d_protein_structure(pdb_string: str, width: int = 500, height: int =
     view.zoomTo()
     
     # Render the view to HTML
-    components.html(view.render(), height=height, width=width)
+    components.html(view.to_html(), height=height, width=width)
 
 def get_gemini_insights(api_key: str, analysis_summary: Dict) -> List[str]:
     """Generate insights using Gemini AI"""
