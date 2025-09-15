@@ -5,3 +5,4 @@ numpy
 plotly
 biopython
 scikit-learn
+py3Dmol
