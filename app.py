@@ -18,7 +18,7 @@ import streamlit.components.v1 as components
 
 # Configure page
 st.set_page_config(
-    page_title="🧬 EternaSeq - Revolutionary DNA Analyzer",
+    page_title="EternaSeq - Revolutionary DNA Analyzer",
     page_icon="🧬",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -1257,8 +1257,8 @@ def main():
     st.markdown("""
     <div class="main-header">
         <h1>🧬 EternaSeq</h1>
-        <h2>The Nobel Prize-Winning Genomic Discovery Engine</h2>
-        <p>Unlock groundbreaking biological discoveries from any DNA sequence. Your next Nobel Prize starts here.</p>
+        <h2>The Genomic Discovery Engine</h2>
+        <p>Unlock groundbreaking biological discoveries from any DNA sequence.</p>
     </div>
     """, unsafe_allow_html=True)
 
