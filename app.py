@@ -590,10 +590,9 @@ def render_3d_protein_structure(pdb_string: str, width: int = 500, height: int =
     # Generate the HTML for the viewer
     html_output = view.to_html()
     
-    # FIX: Ensure the generated HTML is a valid string before rendering.
-    # This prevents a TypeError if py3Dmol returns None or an empty object.
     if html_output:
-        components.html(html_output, height=int(height), width=int(width))
+        # FIX: Explicitly convert the output to a string to avoid the TypeError
+        components.html(str(html_output), height=int(height), width=int(width))
     else:
         st.warning("Could not generate a 3D visualization for this structure.")
 
