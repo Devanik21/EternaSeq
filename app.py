@@ -644,6 +644,130 @@ class DNAAnalyzer:
             'integrations': sorted(integrations, key=lambda x: x['confidence'], reverse=True)
         }
 
+    def microbiome_composition_analysis(self, sequence: str) -> Dict:
+        """Analyzes sequence for microbiome composition markers (simulated)."""
+        # Simplified markers for major bacterial phyla (16S rRNA variable regions)
+        microbiome_markers = {
+            'Firmicutes': 'TGGAGCATGTGGTTTAATTC', # e.g., Lactobacillus, Clostridium
+            'Bacteroidetes': 'GGTCTGAGAGGATGATCAGT', # e.g., Bacteroides
+            'Actinobacteria': 'GCTGGCACGTAGGTAGCC',   # e.g., Bifidobacterium
+            'Proteobacteria': 'CCAGACTCCTACGGGAGGC',  # e.g., E. coli, Salmonella
+            'Verrucomicrobia': 'GTCGTCAGCTCGTGTCGTGA' # e.g., Akkermansia
+        }
+        
+        composition = {}
+        total_hits = 0
+        
+        for phylum, marker in microbiome_markers.items():
+            hits = len(re.findall(marker, sequence))
+            if hits > 0:
+                composition[phylum] = hits
+                total_hits += hits
+        
+        # Normalize to percentages
+        if total_hits > 0:
+            for phylum in composition:
+                composition[phylum] = (composition[phylum] / total_hits) * 100
+        
+        # Add a 'dominant_phylum' field
+        dominant_phylum = "Unknown"
+        if composition:
+            dominant_phylum = max(composition, key=composition.get)
+            
+        return {
+            'composition': composition,
+            'total_marker_hits': total_hits,
+            'dominant_phylum': dominant_phylum,
+            'diversity_score': len(composition) / len(microbiome_markers) * 100 if microbiome_markers else 0
+        }
+
+    def detect_structural_variants(self, sequence: str) -> Dict:
+        """Detects potential structural variants like duplications and inversions."""
+        variants = []
+        
+        # 1. Tandem Duplication detection (simplified)
+        # Look for long repeated segments next to each other
+        window = 50
+        if len(sequence) > window * 2:
+            for i in range(len(sequence) - window * 2):
+                segment1 = sequence[i:i+window]
+                segment2 = sequence[i+window:i+window*2]
+                if segment1 == segment2:
+                    variants.append({
+                        'type': 'Tandem Duplication',
+                        'start': i,
+                        'end': i + window * 2,
+                        'length': window,
+                        'sequence': segment1,
+                        'confidence': 80.0
+                    })
+        
+        # 2. Inversion detection (simplified)
+        # Look for a segment followed by its reverse complement
+        window = 40
+        if len(sequence) > window * 2:
+            for i in range(len(sequence) - window * 2):
+                segment = sequence[i:i+window]
+                rev_comp_segment = self.reverse_complement(segment)
+                # Look for the reverse complement nearby
+                next_segment = sequence[i+window:i+window*2]
+                if rev_comp_segment == next_segment:
+                    variants.append({
+                        'type': 'Inversion',
+                        'start': i,
+                        'end': i + window * 2,
+                        'length': window * 2,
+                        'sequence': segment + '...' + next_segment,
+                        'confidence': 75.0
+                    })
+
+        return {
+            'variants_found': len(variants),
+            'variants': sorted(variants, key=lambda x: x['start'])
+        }
+
+    def comparative_genomics(self, sequence: str) -> Dict:
+        """Performs a simplified comparative genomics analysis."""
+        # Simulated database of orthologous genes from different species
+        ortholog_db = {
+            'Human_TP53': 'ATGGAGGAGCCGCAGTCAGATCCTAGCGTCGAGCCCCCTCTGAGTCAGGAAACATTTTCAGACCTATGGAAACTACTTCCTGAAAACAACGTTCTGTCCCCCTTGCCGTCCCAAGCAATGGATGATTTGATGCTGTCCCCGGACGATATTGAACAATGGTTCACTGAAGACCCAGGTCCAGATGAAGCTCCCAGAATGCCAGAGGCTGCTCCCCCCGTGGCCCCTGCACCAGCAGCTCCTACACCGGCGGCCCCTGCACCAGCCCCCTCCTGGCCCCTGTCATCTTCTGTCCCTTCCCAGAAAACCTACCAGGGCAGCTACGGTTTCCGTCTGGGCTTCTTGCATTCTGGGACAGCCAAGTCTGTGACTTGCACGTACTCCCCTGCCCTCAACAAGATGTTTTGCCAACTGGCCAAGACCTGCCCTGTGCAGCTGTGGGTTGATTCCACACCCCCGCCCGGCACCCGCGTCCGCGCCATGGCCATCTACAAGCAGTCACAGCACATGACGGAGGTTGTGAGGCGCTGCCCCCACCATGAGCGCTGCTCAGATAGCGATGGTCTGGCCCCTCCTCAGCATCTTATCCGAGTGGAAGGAAATTTGCGTGTGGAGTATTTGGATGACAGAAACACTTTTCGACATAGTGTGGTGGTGCCCTATGAGCCGCCTGAGGTTGGCTCTGACTGTACCACCATCCACTACAACTACATGTGTAACAGTTCCTGCATGGGCGGCATGAACCGGAGGCCCATCCTCACCATCATCACACTGGAAGACTCCAGTGGTAATCTACTGGGACGGAACAGCTTTGAGGTGCGTGTTTGTGCCTGTCCTGGGAGAGACCGGCGCACAGAGGAAGAGAATCTCCGCAAGAAAGGGGAGCCTCACCACGAGCTGCCCCCAGGGAGCACTAAGCGAGCACTGCCCAACAACACCAGCTCCTCTCCCCAGCCAAAGAAGAAACCACTGGATGGAGAATATTTCACCCTTCAGATCCGTGGGCGTGAGCGCTTCGAGATGTTCCGAGAGCTGAATGAGGCCTTAGAGTACCCGGACAGGCCT',
+            'Mouse_Trp53': 'ATGGAGGATTCGCAGTCAGATCCTAGCATTCGAGCCCCCTCTGAGTCAGGAAGCATTTTCAGGCCTATGGAAACTACTTCCTGAAAACAACGTTCTGTCCCCCTTGCCGTCCCAAGCAATGGATGATTTGATGCTGTCCCCGGACGATATTGAACAATGGTTCACTGAAGACCCAGGTCCAGATGAAGCTCCCAGAATGCCAGAGGCTGCTCCCCCCGTGGCCCCTGCACCAGCAGCTCCTACACCGGCGGCCCCTGCACCAGCCCCCTCCTGGCCCCTGTCATCTTCTGTCCCTTCCCAGAAAACCTACCAGGGCAGCTACGGTTTCCGTCTGGGCTTCTTGCATTCTGGGACAGCCAAGTCTGTGACTTGCACGTACTCCCCTGCCCTCAACAAGATGTTTTGCCAACTGGCCAAGACCTGCCCTGTGCAGCTGTGGGTTGATTCCACACCCCCGCCCGGCACCCGCGTCCGCGCCATGGCCATCTACAAGCAGTCACAGCACATGACGGAGGTTGTGAGGCGCTGCCCCCACCATGAGCGCTGCTCAGATAGCGATGGTCTGGCCCCTCCTCAGCATCTTATCCGAGTGGAAGGAAATTTGCGTGTGGAGTATTTGGATGACAGAAACACTTTTCGACATAGTGTGGTGGTGCCCTATGAGCCGCCTGAGGTTGGCTCTGACTGTACCACCATCCACTACAACTACATGTGTAACAGTTCCTGCATGGGCGGCATGAACCGGAGGCCCATCCTCACCATCATCACACTGGAAGACTCCAGTGGTAATCTACTGGGACGGAACAGCTTTGAGGTGCGTGTTTGTGCCTGTCCTGGGAGAGACCGGCGCACAGAGGAAGAGAATCTCCGCAAGAAAGGGGAGCCTCACCACGAGCTGCCCCCAGGGAGCACTAAGCGAGCACTGCCCAACAACACCAGCTCCTCTCCCCAGCCAAAGAAGAAACCACTGGATGGAGAATATTTCACCCTTCAGATCCGTGGGCGTGAGCGCTTCGAGATGTTCCGAGAGCTGAATGAGGCCTTAGAGTACCCGGACAGGCCT',
+            'Zebrafish_tp53': 'ATGGAGGACTCTCAATCAGATCCTAGCGTCGAGCCCCCTCTGAGTCAGGAAACATTTTCAGACCTATGGAAACTACTTCCTGAAAACAACGTTCTGTCCCCCTTGCCGTCCCAAGCAATGGATGATTTGATGCTGTCCCCGGACGATATTGAACAATGGTTCACTGAAGACCCAGGTCCAGATGAAGCTCCCAGAATGCCAGAGGCTGCTCCCCCCGTGGCCCCTGCACCAGCAGCTCCTACACCGGCGGCCCCTGCACCAGCCCCCTCCTGGCCCCTGTCATCTTCTGTCCCTTCCCAGAAAACCTACCAGGGCAGCTACGGTTTCCGTCTGGGCTTCTTGCATTCTGGGACAGCCAAGTCTGTGACTTGCACGTACTCCCCTGCCCTCAACAAGATGTTTTGCCAACTGGCCAAGACCTGCCCTGTGCAGCTGTGGGTTGATTCCACACCCCCGCCCGGCACCCGCGTCCGCGCCATGGCCATCTACAAGCAGTCACAGCACATGACGGAGGTTGTGAGGCGCTGCCCCCACCATGAGCGCTGCTCAGATAGCGATGGTCTGGCCCCTCCTCAGCATCTTATCCGAGTGGAAGGAAATTTGCGTGTGGAGTATTTGGATGACAGAAACACTTTTCGACATAGTGTGGTGGTGCCCTATGAGCCGCCTGAGGTTGGCTCTGACTGTACCACCATCCACTACAACTACATGTGTAACAGTTCCTGCATGGGCGGCATGAACCGGAGGCCCATCCTCACCATCATCACACTGGAAGACTCCAGTGGTAATCTACTGGGACGGAACAGCTTTGAGGTGCGTGTTTGTGCCTGTCCTGGGAGAGACCGGCGCACAGAGGAAGAGAATCTCCGCAAGAAAGGGGAGCCTCACCACGAGCTGCCCCCAGGGAGCACTAAGCGAGCACTGCCCAACAACACCAGCTCCTCTCCCCAGCCAAAGAAGAAACCACTGGATGGAGAATATTTCACCCTTCAGATCCGTGGGCGTGAGCGCTTCGAGATGTTCCGAGAGCTGAATGAGGCCTTAGAGTACCCGGACAGGCCT'
+        }
+        
+        homology_results = []
+        
+        # Simplified alignment: find longest common substring using dynamic programming
+        for species_gene, ortholog_seq in ortholog_db.items():
+            s1 = sequence.upper()
+            s2 = ortholog_seq.upper()
+            m = [[0] * (1 + len(s2)) for _ in range(1 + len(s1))]
+            longest, x_longest = 0, 0
+            for x in range(1, 1 + len(s1)):
+                for y in range(1, 1 + len(s2)):
+                    if s1[x - 1] == s2[y - 1]:
+                        m[x][y] = m[x - 1][y - 1] + 1
+                        if m[x][y] > longest:
+                            longest = m[x][y]
+                            x_longest = x
+                    else:
+                        m[x][y] = 0
+            
+            match_length = longest
+            
+            if match_length > 20: # Minimum significant match
+                identity = (match_length / min(len(s1), len(s2))) * 100 if min(len(s1), len(s2)) > 0 else 0
+                homology_results.append({
+                    'ortholog': species_gene,
+                    'identity': identity,
+                    'match_length': match_length,
+                    'e_value': 10 ** (-identity/10) # Simulated E-value
+                })
+                
+        return {
+            'homology_hits': sorted(homology_results, key=lambda x: x['identity'], reverse=True)
+        }
+
     def generate_pdb_from_structure(self, protein_sequence: str, structure_sequence: str) -> str:
         """Generates a simulated PDB file string from a protein and its secondary structure."""
         pdb_lines = []
@@ -848,6 +972,9 @@ def main():
                 epigenetic_results = None
                 ncrna_results = None
                 viral_results = None
+                microbiome_results = None
+                sv_results = None
+                comp_gen_results = None
                 selected_feature = st.session_state.get('selected_beta_feature', "Select a Beta Feature...")
                 if selected_feature.startswith("1."):
                     epigenetic_results = analyzer.epigenetic_analysis(sequence)
@@ -855,6 +982,12 @@ def main():
                     ncrna_results = analyzer.predict_non_coding_rna(sequence)
                 elif selected_feature.startswith("3."):
                     viral_results = analyzer.detect_viral_integration(sequence)
+                elif selected_feature.startswith("4."):
+                    microbiome_results = analyzer.microbiome_composition_analysis(sequence)
+                elif selected_feature.startswith("5."):
+                    sv_results = analyzer.detect_structural_variants(sequence)
+                elif selected_feature.startswith("6."):
+                    comp_gen_results = analyzer.comparative_genomics(sequence)
                 # Metrics for advanced tab
                 entropy = -sum(p * np.log2(p) for p in [sequence.count(n)/len(sequence) for n in 'ATCG'] if p > 0)
                 words_3 = [sequence[i:i+3] for i in range(len(sequence)-2)]
@@ -1262,6 +1395,75 @@ def main():
                             st.success("No known viral signatures or retrovirus-like elements detected.")
                     else:
                         st.warning("Viral integration analysis could not be performed.")
+                
+                elif selected_feature.startswith("4."):
+                    # Microbiome Composition Analysis
+                    if microbiome_results:
+                        st.subheader("🦠 Microbiome Composition Analysis (Simulated)")
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.metric("Total Marker Hits", microbiome_results['total_marker_hits'])
+                            st.metric("Dominant Phylum", microbiome_results['dominant_phylum'])
+                            st.metric("Phyla Diversity Score", f"{microbiome_results['diversity_score']:.1f}%")
+                        
+                        with col2:
+                            if microbiome_results['composition']:
+                                comp_df = pd.DataFrame(list(microbiome_results['composition'].items()), columns=['Phylum', 'Percentage'])
+                                fig = px.pie(comp_df, values='Percentage', names='Phylum', 
+                                           title="Predicted Microbiome Composition",
+                                           color_discrete_sequence=px.colors.sequential.Plasma_r)
+                                st.plotly_chart(fig, use_container_width=True, key=f'microbiome_pie_{seq_idx}')
+                            else:
+                                st.info("No known microbiome markers detected. This may be a pure host sample.")
+                    else:
+                        st.warning("Microbiome analysis could not be performed.")
+
+                elif selected_feature.startswith("5."):
+                    # Structural Variant Detection
+                    if sv_results:
+                        st.subheader("🧬 Structural Variant (SV) Detection")
+                        st.metric("Potential SVs Found", sv_results['variants_found'])
+                        
+                        if sv_results['variants']:
+                            sv_df = pd.DataFrame(sv_results['variants'])
+                            st.dataframe(sv_df.style.format({'confidence': '{:.1f}%'}))
+                            
+                            fig_sv = px.scatter(sv_df, x='start', y='length', color='type',
+                                                title="Detected Structural Variants by Location and Size",
+                                                hover_data=['start', 'end', 'type'],
+                                                labels={'start': 'Start Position', 'length': 'Variant Length (bp)'})
+                            fig_sv.update_layout(xaxis_range=[0, len(sequence)])
+                            st.plotly_chart(fig_sv, use_container_width=True, key=f'sv_dist_{seq_idx}')
+                        else:
+                            st.success("No major structural variants like large tandem duplications or inversions were detected.")
+                    else:
+                        st.warning("Structural variant analysis could not be performed.")
+
+                elif selected_feature.startswith("6."):
+                    # Comparative Genomics
+                    if comp_gen_results:
+                        st.subheader("🌍 Comparative Genomics")
+                        
+                        if comp_gen_results['homology_hits']:
+                            st.metric("Homologous Genes Found", len(comp_gen_results['homology_hits']))
+                            homology_df = pd.DataFrame(comp_gen_results['homology_hits'])
+                            
+                            st.markdown("**Top Homology Hits:**")
+                            st.dataframe(homology_df.style.format({
+                                'identity': '{:.2f}%',
+                                'e_value': '{:.2e}'
+                            }))
+                            
+                            fig_homology = px.bar(homology_df, x='ortholog', y='identity', color='e_value',
+                                                  title="Homology Identity to Known Orthologs",
+                                                  labels={'ortholog': 'Orthologous Gene', 'identity': 'Sequence Identity (%)'},
+                                                  color_continuous_scale='Cividis_r')
+                            st.plotly_chart(fig_homology, use_container_width=True, key=f'homology_chart_{seq_idx}')
+                        else:
+                            st.info("No significant homology found against the simulated database of common orthologs.")
+                    else:
+                        st.warning("Comparative genomics analysis could not be performed.")
                 
                 else:
                     # Preview for other features
