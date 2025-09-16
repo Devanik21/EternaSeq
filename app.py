@@ -928,57 +928,106 @@ class DNAAnalyzer:
             'kmer_frequencies': {kmer: freq for kmer, freq in sorted(kmer_freq.items(), key=lambda item: item[1], reverse=True)}
         }
 
-    def analyze_biophysical_properties(self, sequence: str, window_size: int = 100, step: int = 10) -> Dict:
-        """Analyzes biophysical properties of the DNA sequence."""
-        if len(sequence) < window_size:
-            return {'error': 'Sequence too short for analysis'}
+    def analyze_repeats(self, sequence: str) -> Dict:
+        """Analyzes various types of repeats: microsatellites, inverted, and dispersed."""
+        all_repeats = []
 
-        # Bendability lookup (simplified, based on consensus)
-        bendability_map = {
-            'AA': 9.1, 'TT': 9.1, 'AT': 8.5, 'TA': 2.1,
-            'AC': 7.9, 'GT': 7.9, 'CA': 5.8, 'TG': 5.8,
-            'AG': 6.9, 'CT': 6.9, 'GA': 6.0, 'TC': 6.0,
-            'CC': 5.0, 'GG': 5.0, 'CG': 4.0, 'GC': 4.0
-        }
+        # 1. Microsatellites (Simple Sequence Repeats)
+        i = 0
+        while i < len(sequence):
+            found_repeat_at_i = False
+            # Check for motifs of length 6 down to 1 to prioritize longer motifs
+            for motif_len in range(6, 0, -1):
+                min_reps = max(3, 12 // motif_len) if motif_len > 0 else 3
+                
+                if i + motif_len * min_reps > len(sequence):
+                    continue
 
-        positions = []
-        tm_profile = []
-        gc_skew_profile = []
-        bendability_profile = []
+                motif = sequence[i:i+motif_len]
+                # Avoid simple homopolymer motifs like 'AAAAAA' being detected by motif_len=2 ('AA')
+                if len(set(motif)) == 1 and motif_len > 1:
+                    continue
 
-        for i in range(0, len(sequence) - window_size, step):
+                reps = 1
+                while sequence[i + reps*motif_len : i + (reps+1)*motif_len] == motif:
+                    reps += 1
+                
+                if reps >= min_reps:
+                    start = i
+                    end = i + reps * motif_len
+                    all_repeats.append({
+                        'class': 'Microsatellite',
+                        'type': f'{motif_len}-mer',
+                        'motif': motif,
+                        'start': start,
+                        'end': end,
+                        'length': end - start,
+                        'repetitions': reps
+                    })
+                    i = end # Advance i past the found repeat
+                    found_repeat_at_i = True
+                    break # Stop checking for shorter motifs at this position
+            
+            if not found_repeat_at_i:
+                i += 1
+
+        # 2. Inverted Repeats (potential for hairpins)
+        window_size = 150
+        min_len = 10
+        for i in range(len(sequence) - window_size):
+            # To avoid finding too many, we can step through the sequence
+            if i % 10 != 0: continue
+
             window = sequence[i:i+window_size]
-            positions.append(i + window_size // 2)
+            for l in range(min_len, window_size // 2):
+                sub = window[:l]
+                rev_comp_sub = self.reverse_complement(sub)
+                if rev_comp_sub in window[l:]:
+                    pos = window.find(rev_comp_sub, l)
+                    all_repeats.append({
+                        'class': 'Inverted Repeat',
+                        'type': 'Palindromic',
+                        'motif': f"{sub}...{rev_comp_sub}",
+                        'start': i,
+                        'end': i + pos + l,
+                        'length': pos + l,
+                        'repetitions': 2
+                    })
+                    break # Found one in this window, move on
 
-            # 1. Melting Temperature (Tm)
-            g_count = window.count('G')
-            c_count = window.count('C')
-            a_count = window.count('A')
-            t_count = window.count('T')
-            tm = 4 * (g_count + c_count) + 2 * (a_count + t_count)
-            tm_profile.append(tm)
+        # 3. Dispersed Repeats (SINE/LINE-like elements - simulated)
+        dispersed_db = {
+            'Alu-like (SINE)': 'CCTGTAGTCCCAGCTACT',
+            'L1-like (LINE)': 'AATTTGAAATTTGAAATTTG'
+        }
+        for name, motif in dispersed_db.items():
+            for match in re.finditer(motif, sequence):
+                all_repeats.append({
+                    'class': 'Dispersed Repeat',
+                    'type': name,
+                    'motif': motif,
+                    'start': match.start(),
+                    'end': match.end(),
+                    'length': len(motif),
+                    'repetitions': 1
+                })
 
-            # 2. GC Skew
-            if (g_count + c_count) > 0:
-                gc_skew = (g_count - c_count) / (g_count + c_count)
-            else:
-                gc_skew = 0
-            gc_skew_profile.append(gc_skew)
-
-            # 3. Bendability
-            bend_score = 0
-            for j in range(window_size - 1):
-                dinuc = window[j:j+2]
-                bend_score += bendability_map.get(dinuc, 5.0) # Use average for unknown
-            bendability_profile.append(bend_score / window_size)
+        # Remove overlapping repeats, keeping the longest one
+        unique_repeats = []
+        if all_repeats:
+            all_repeats.sort(key=lambda x: x['length'], reverse=True)
+            covered_indices = set()
+            for repeat in all_repeats:
+                indices = set(range(repeat['start'], repeat['end']))
+                if not indices.intersection(covered_indices):
+                    unique_repeats.append(repeat)
+                    covered_indices.update(indices)
 
         return {
-            'positions': positions,
-            'tm_profile': tm_profile,
-            'gc_skew_profile': gc_skew_profile,
-            'bendability_profile': bendability_profile,
-            'avg_tm': np.mean(tm_profile) if tm_profile else 0,
-            'avg_bendability': np.mean(bendability_profile) if bendability_profile else 0
+            'total_repeats_found': len(unique_repeats),
+            'repeat_summary': dict(Counter(r['class'] for r in unique_repeats)),
+            'repeat_density': (sum(r['length'] for r in unique_repeats) / len(sequence)) * 100 if sequence else 0,
+            'repeats': sorted(unique_repeats, key=lambda x: x['start'])
         }
 
     def predict_tfbs(self, sequence: str) -> Dict:
