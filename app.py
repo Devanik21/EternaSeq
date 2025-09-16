@@ -495,6 +495,63 @@ class DNAAnalyzer:
             'pharmacogenomic_score': len(drug_targets) * 25
         }
 
+    def epigenetic_analysis(self, sequence: str) -> Dict:
+        """Analyzes epigenetic features like methylation potential."""
+        cpg_islands = []
+        
+        # A simple CpG island definition: region > 200bp, GC > 50%, Obs/Exp CpG > 0.6
+        window_size = 200
+        step_size = 50
+        
+        if len(sequence) < window_size:
+            return {
+                'cpg_islands_found': 0,
+                'cpg_islands': [],
+                'g_quadruplexes_found': 0,
+                'g_quadruplexes': [],
+                'overall_methylation_potential': 'Low'
+            }
+
+        for i in range(0, len(sequence) - window_size, step_size):
+            window = sequence[i:i+window_size]
+            g_count = window.count('G')
+            c_count = window.count('C')
+            gc_content = (g_count + c_count) / window_size * 100
+            
+            cpg_count = window.count('CG')
+            # Observed/Expected ratio
+            if g_count > 0 and c_count > 0:
+                expected_cpg = (c_count * g_count) / window_size
+                obs_exp_ratio = cpg_count / expected_cpg if expected_cpg > 0 else 0
+            else:
+                obs_exp_ratio = 0
+                
+            if gc_content > 50 and obs_exp_ratio > 0.6:
+                cpg_islands.append({
+                    'start': i,
+                    'end': i + window_size,
+                    'gc_content': gc_content,
+                    'obs_exp_ratio': obs_exp_ratio
+                })
+                
+        # G-quadruplex prediction (simple pattern)
+        g_quadruplex_pattern = r'G{3,5}\w{1,7}G{3,5}\w{1,7}G{3,5}\w{1,7}G{3,5}'
+        g_quadruplexes = []
+        for match in re.finditer(g_quadruplex_pattern, sequence):
+            g_quadruplexes.append({
+                'start': match.start(),
+                'end': match.end(),
+                'sequence': match.group(0)
+            })
+            
+        return {
+            'cpg_islands_found': len(cpg_islands),
+            'cpg_islands': cpg_islands,
+            'g_quadruplexes_found': len(g_quadruplexes),
+            'g_quadruplexes': g_quadruplexes,
+            'overall_methylation_potential': 'High' if len(cpg_islands) > 2 else 'Moderate' if len(cpg_islands) > 0 else 'Low'
+        }
+
     def generate_pdb_from_structure(self, protein_sequence: str, structure_sequence: str) -> str:
         """Generates a simulated PDB file string from a protein and its secondary structure."""
         pdb_lines = []
@@ -606,6 +663,30 @@ def main():
     </div>
     """, unsafe_allow_html=True)
 
+    with st.sidebar:
+        st.title("🔬 Beta Features")
+        st.info("Explore cutting-edge experimental analyses. These features are under active development.")
+        
+        beta_features = [
+            "Select a Beta Feature...",
+            "1. Epigenetic Analysis",
+            "2. Non-coding RNA Prediction",
+            "3. Viral Integration Site Detection",
+            "4. Microbiome Composition Analysis",
+            "5. Structural Variant Detection",
+            "6. Comparative Genomics",
+            "7. 3D Genome Folding Prediction",
+            "8. Gene Regulatory Network Inference",
+            "9. Synthetic Biology Circuit Design",
+            "10. AI-Powered Drug Discovery"
+        ]
+        
+        st.selectbox(
+            "Choose a feature to run:",
+            options=beta_features,
+            key="selected_beta_feature"
+        )
+
 
     # File upload section
     st.header("📁 DNA Sequence Upload")
@@ -671,6 +752,11 @@ def main():
                 pharma_analysis = analyzer.pharmacogenomics_analysis(sequence)
                 crispr_guides = analyzer.design_crispr_guides(sequence)
                 
+                # Run beta analysis if selected
+                epigenetic_results = None
+                if st.session_state.get('selected_beta_feature', "Select a Beta Feature...").startswith("1."):
+                    epigenetic_results = analyzer.epigenetic_analysis(sequence)
+
                 # Metrics for advanced tab
                 entropy = -sum(p * np.log2(p) for p in [sequence.count(n)/len(sequence) for n in 'ATCG'] if p > 0)
                 words_3 = [sequence[i:i+3] for i in range(len(sequence)-2)]
@@ -977,6 +1063,65 @@ def main():
                     
                 else:
                     st.warning("No suitable CRISPR gRNA targets found based on current criteria (PAM: NGG).")
+
+            # =================================================================
+            # == Beta Features Section                                      ==
+            # =================================================================
+            if st.session_state.get('selected_beta_feature') and st.session_state.selected_beta_feature != "Select a Beta Feature...":
+                st.markdown("---")
+                st.header(f"🔬 Beta Feature Analysis: {st.session_state.selected_beta_feature.split('.', 1)[1].strip()}")
+
+                if st.session_state.selected_beta_feature.startswith("1."):
+                    # Epigenetic Analysis (Implemented)
+                    if epigenetic_results:
+                        st.subheader("🧬 Epigenetic Landscape")
+                        st.metric("Overall Methylation Potential", epigenetic_results['overall_methylation_potential'])
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.subheader(f"🏝️ CpG Islands ({epigenetic_results['cpg_islands_found']} found)")
+                            if epigenetic_results['cpg_islands']:
+                                cpg_df = pd.DataFrame(epigenetic_results['cpg_islands'])
+                                st.dataframe(cpg_df.head().style.format({'gc_content': '{:.1f}%', 'obs_exp_ratio': '{:.2f}'}))
+                                
+                                fig = px.scatter(cpg_df, x='start', y='gc_content', size='obs_exp_ratio',
+                                               title="Detected CpG Islands by Location and GC Content",
+                                               hover_data=['start', 'end', 'obs_exp_ratio'],
+                                               labels={'start': 'Start Position', 'gc_content': 'GC Content (%)'})
+                                st.plotly_chart(fig, key=f'cpG_islands_{seq_idx}')
+                            else:
+                                st.info("No significant CpG islands detected.")
+                        
+                        with col2:
+                            st.subheader(f"🧬 G-Quadruplexes ({epigenetic_results['g_quadruplexes_found']} found)")
+                            if epigenetic_results['g_quadruplexes']:
+                                gq_df = pd.DataFrame(epigenetic_results['g_quadruplexes'])
+                                st.dataframe(gq_df[['start', 'end']].head())
+                                st.markdown("**Example G-Quadruplex sequence:**")
+                                st.code(gq_df.iloc[0]['sequence'])
+                            else:
+                                st.info("No G-Quadruplex motifs found.")
+                    else:
+                        st.warning("Epigenetic analysis could not be performed.")
+                
+                else:
+                    # Preview for other features
+                    st.info("This feature is currently in preview and not yet implemented.")
+                    feature_name = st.session_state.selected_beta_feature.split('.', 1)[1].strip()
+                    st.markdown(f"**Coming Soon: {feature_name}**")
+                    
+                    preview_text = {
+                        "Non-coding RNA Prediction": "predicting and classifying non-coding RNAs like miRNA, lncRNA, and circRNA from the sequence, revealing their potential regulatory roles.",
+                        "Viral Integration Site Detection": "identifying potential integration sites of viral DNA into the host genome, crucial for studying viral diseases and gene therapy.",
+                        "Microbiome Composition Analysis": "analyzing the sequence for markers of different microbial species to estimate the composition of a microbiome sample.",
+                        "Structural Variant Detection": "detecting large-scale structural variants like deletions, duplications, inversions, and translocations within the genome.",
+                        "Comparative Genomics": "aligning the sequence against a database of other species to identify conserved regions, evolutionary relationships, and functional elements.",
+                        "3D Genome Folding Prediction": "predicting how the DNA sequence folds in three-dimensional space, revealing insights into gene regulation and chromatin structure.",
+                        "Gene Regulatory Network Inference": "inferring networks of interacting genes and transcription factors to understand complex biological pathways.",
+                        "Synthetic Biology Circuit Design": "providing tools to design and simulate synthetic gene circuits for applications in biotechnology and medicine.",
+                        "AI-Powered Drug Discovery": "using machine learning models to predict potential drug targets and design novel therapeutic molecules based on the genomic data."
+                    }
+                    st.write(f"This analysis will provide deep insights into {preview_text.get(feature_name, 'this area of genomics')}")
 
         # Generate comprehensive report
         st.markdown("---")
