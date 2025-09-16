@@ -913,6 +913,58 @@ class DNAAnalyzer:
             })
         return {'designs': designs}
 
+    def ai_drug_discovery(self, all_analyses_summary: List[Dict], api_key: str) -> str:
+        """Uses Gemini to generate drug discovery insights based on a summary of all sequences."""
+        if not api_key:
+            return "## 🔑 Google API Key Required\n\nPlease enter your Google API key in the sidebar to use this feature."
+
+        try:
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel('gemini-2.0-flash-lite')
+        except Exception as e:
+            return f"## ❌ AI Model Configuration Error\n\nCould not configure the AI model. Please check your API key. Error: {e}"
+
+        # Create a comprehensive summary prompt
+        prompt = "You are a world-class computational biologist and pharmacologist. Based on the following summary of a genomic analysis dataset, provide novel insights for drug discovery. Focus on identifying potential drug targets, suggesting therapeutic strategies, and outlining next steps for research. Be concise, structured, and data-driven.\n\n"
+        prompt += f"### Dataset Summary:\n- **Total Sequences Analyzed:** {len(all_analyses_summary)}\n"
+
+        # Aggregate data
+        all_genes = [gene for summary in all_analyses_summary for gene in summary['genes_found']]
+        gene_counts = Counter(all_genes)
+        
+        all_species = [summary['top_species'] for summary in all_analyses_summary]
+        species_counts = Counter(all_species)
+        
+        all_pharma_targets = [target for summary in all_analyses_summary for target in summary['pharma_targets']]
+        pharma_counts = Counter(all_pharma_targets)
+
+        all_viral_integrations = [virus for summary in all_analyses_summary for virus in summary['viral_integrations']]
+        viral_counts = Counter(all_viral_integrations)
+
+        # Add aggregated data to prompt
+        if gene_counts:
+            prompt += f"- **Most Common Genes Identified:** {', '.join([f'{g} ({c}x)' for g, c in gene_counts.most_common(3)])}\n"
+        if species_counts and species_counts.most_common(1)[0][0] != 'Unknown':
+             prompt += f"- **Most Common Predicted Species:** {', '.join([f'{s} ({c}x)' for s, c in species_counts.most_common(2)])}\n"
+        if pharma_counts:
+            prompt += f"- **Key Pharmacogenomic Targets Detected:** {', '.join([f'{t} ({c}x)' for t, c in pharma_counts.most_common(3)])}\n"
+        if viral_counts:
+            prompt += f"- **Detected Viral Signatures:** {', '.join([f'{v} ({c}x)' for v, c in viral_counts.most_common(2)])}\n"
+        
+        prompt += "\n### Your Task:\n"
+        prompt += "1.  **Top Drug Target Candidates:** Based on the identified genes and pathways, list the top 3-5 most promising drug targets. Justify each choice briefly.\n"
+        prompt += "2.  **Therapeutic Hypotheses:** Propose 2-3 novel therapeutic strategies. For example, 'Develop a small molecule inhibitor for GENE_X' or 'Use an ASO to target the lncRNA associated with GENE_Y'.\n"
+        prompt += "3.  **Potential Drug Modalities:** Suggest suitable drug modalities (e.g., small molecules, antibodies, gene therapy, RNA therapeutics) for the top targets.\n"
+        prompt += "4.  **Next Steps for Research:** Outline a clear, high-level plan for the next steps in the drug discovery process based on these initial findings.\n"
+        prompt += "5.  **Risks and Considerations:** Briefly mention any potential risks or challenges (e.g., off-target effects, toxicity, patient stratification).\n\n"
+        prompt += "Present your response in clear, well-structured markdown."
+
+        try:
+            response = model.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            return f"## ❌ AI Generation Error\n\nAn error occurred while communicating with the AI model. Please try again. Error: {e}"
+
     def generate_pdb_from_structure(self, protein_sequence: str, structure_sequence: str) -> str:
         """Generates a simulated PDB file string from a protein and its secondary structure."""
         pdb_lines = []
@@ -1047,6 +1099,14 @@ def main():
             options=beta_features,
             key="selected_beta_feature"
         )
+        st.divider()
+        st.subheader("🔑 API Configuration")
+        st.text_input(
+            "Google API Key",
+            key="google_api_key",
+            type="password",
+            help="Required for AI-Powered Drug Discovery feature."
+        )
 
 
     # File upload section
@@ -1088,10 +1148,12 @@ def main():
         with st.spinner("🧬 Parsing DNA sequences..."):
             parsed_data = analyzer.parse_sequence_file(file_content)
         
+        all_analyses_summary = []
+
         if parsed_data['total_sequences'] == 0:
             st.error("No valid DNA sequences found. Please check file format.")
             return
-
+        
         # Display sequence info
         st.success(f"✅ Successfully loaded {parsed_data['total_sequences']} DNA sequence(s)")
         
@@ -1158,6 +1220,19 @@ def main():
                             max_repeat = max(max_repeat, current_repeat)
                             current_repeat = 1
                     max_repeat = max(max_repeat, current_repeat)
+
+                # Create a summary of this sequence's analysis for the aggregate AI feature
+                summary_for_ai = {
+                    'sequence_length': composition['length'],
+                    'orfs_found': len(orfs),
+                    'top_orf_length': orfs[0]['length'] if orfs else 0,
+                    'genes_found': [g['gene_id'] for g in genes_found],
+                    'top_species': list(species_scores.keys())[0] if species_scores else 'Unknown',
+                    'pharma_targets': [t['target'] for t in pharma_analysis['drug_targets']],
+                    'viral_integrations': [v['virus'] for v in viral_results['integrations']] if viral_results and 'integrations' in viral_results else [],
+                    'structural_variants': [sv['type'] for sv in sv_results['variants']] if sv_results and 'variants' in sv_results else []
+                }
+                all_analyses_summary.append(summary_for_ai)
 
             st.markdown(f"---")
             st.header(f"🔬 Analysis Results - Sequence {seq_idx + 1}")
@@ -1452,10 +1527,10 @@ def main():
             # =================================================================
             # == Beta Features Section                                      ==
             # =================================================================
-            if selected_feature and selected_feature != "Select a Beta Feature...":
+            if selected_feature and selected_feature != "Select a Beta Feature..." and not selected_feature.startswith("10."):
                 st.markdown("---")
                 st.header(f"🔬 Beta Feature Analysis: {st.session_state.selected_beta_feature.split('.', 1)[1].strip()}")
-
+                
                 if selected_feature.startswith("1."):
                     # Epigenetic Analysis (Implemented)
                     if epigenetic_results:
@@ -1745,6 +1820,27 @@ def main():
                     st.write(f"This analysis will provide deep insights into {preview_text.get(feature_name, 'this area of genomics')}")
 
         # Generate comprehensive report
+        # =================================================================
+        # == Aggregate Beta Features (run once after all sequences)      ==
+        # =================================================================
+        selected_feature = st.session_state.get('selected_beta_feature', "Select a Beta Feature...")
+        if selected_feature.startswith("10."):
+            st.markdown("---")
+            st.header(f"🔬 Beta Feature Analysis: {selected_feature.split('.', 1)[1].strip()}")
+            st.info("This feature provides a high-level summary and drug discovery hypotheses based on an analysis of **all** uploaded sequences.")
+
+            if st.button("🤖 Generate AI-Powered Insights", key="generate_ai_insights"):
+                api_key = st.session_state.get("google_api_key")
+                if not all_analyses_summary:
+                    st.warning("No sequences were analyzed. Please upload data first.")
+                else:
+                    with st.spinner("🧠 Synthesizing genomic data and consulting with AI oracle..."):
+                        ai_insights = analyzer.ai_drug_discovery(all_analyses_summary, api_key)
+                        st.session_state.ai_insights = ai_insights # Cache the result
+            
+            if 'ai_insights' in st.session_state and st.session_state.ai_insights:
+                st.markdown(st.session_state.ai_insights)
+
         st.markdown("---")
         st.header("📊 Comprehensive Analysis Report")
         
