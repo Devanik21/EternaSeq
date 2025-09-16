@@ -1248,281 +1248,145 @@ def main():
             with col4:
                 st.metric("Complexity", "High" if len(set(sequence)) == 4 else "Medium")
 
-            # Create tabs for different analyses
-            tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-                "🧬 Sequence Analysis", "🔍 Gene Identification", "🧪 Protein Prediction", 
-                "🌿 Species Classification", "⚗️ Drug Targets", "🔬 Advanced Analysis", "✂️ Gene Editing (CRISPR)"
-            ])
+            # NEW: Analysis view selector
+            analysis_options = [
+                "🧬 Sequence", "🔍 Genes", "🧪 Protein", "🌿 Species", 
+                "⚗️ Targets", "🔬 Advanced", "✂️ CRISPR"
+            ]
 
-            with tab1:
-                st.subheader("📊 Nucleotide Composition Analysis")
-                
-                # Composition chart
-                comp_df = pd.DataFrame(list(composition['composition'].items()), columns=['Nucleotide', 'Count'])
-                fig = px.pie(comp_df, values='Count', names='Nucleotide', 
-                           title="Nucleotide Distribution",
-                           color_discrete_map={'A':'#FF6B6B', 'T':'#4ECDC4', 'G':'#45B7D1', 'C':'#96CEB4'})
-                st.plotly_chart(fig, key=f'piE_distribution_{seq_idx}')
-                
-                # Sequence visualization
-                st.subheader("🔤 Sequence Visualization")
-                formatted_seq = create_sequence_visualization(sequence)
-                st.markdown(f'<div class="dna-sequence">{formatted_seq}</div>', unsafe_allow_html=True)
-                
-                # Composition metrics
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.markdown("**Composition Metrics**")
-                    st.write(f"• AT Content: {composition['at_content']:.1f}%")
-                    st.write(f"• GC Content: {composition['gc_content']:.1f}%")
-                    st.write(f"• CpG Islands: {composition['cpg_count']} sites")
-                
-                with col2:
-                    st.markdown("**Sequence Quality**")
-                    quality_score = 85 + (composition['gc_content'] - 50) if 40 <= composition['gc_content'] <= 60 else 70
-                    st.write(f"• Quality Score: {min(99, quality_score):.0f}/100")
-                    st.write(f"• Complexity: {'High' if len(set(sequence)) == 4 else 'Medium'}")
-                    st.write(f"• Length Class: {'Long' if composition['length'] > 1000 else 'Short'}")
+            # Initialize session state for the active analysis view for each sequence
+            if 'active_analysis' not in st.session_state:
+                st.session_state.active_analysis = {}
+            if seq_idx not in st.session_state.active_analysis:
+                st.session_state.active_analysis[seq_idx] = analysis_options[0]
 
-            with tab2:
-                st.subheader("🎯 Gene Identification & ORF Analysis")
-                if orfs:
-                    st.success(f"🔍 Found {len(orfs)} Open Reading Frames")
-                    
-                    # ORF summary table
-                    orf_data = []
-                    for i, orf in enumerate(orfs[:10]):  # Show top 10
-                        orf_data.append({
-                            'ORF': f"ORF_{i+1}",
-                            'Start': orf['start'],
-                            'End': orf['end'],
-                            'Length (bp)': orf['length'],
-                            'Strand': orf['strand'],
-                            'Frame': orf['frame'],
-                            'Protein Length (aa)': orf['protein_length']
-                        })
-                    
-                    orf_df = pd.DataFrame(orf_data)
-                    st.dataframe(orf_df, use_container_width=True)
-                    
-                    # Visualize ORFs
-                    fig = px.scatter(orf_df, x='Start', y='Protein Length (aa)', 
-                                   size='Length (bp)', color='Strand',
-                                   title="Open Reading Frames Distribution",
-                                   hover_data=['Frame'])
-                    st.plotly_chart(fig, key=f'orf_distribution_{seq_idx}')
-                    
-                    # Show largest ORF details
+            # Create a horizontal button bar for analysis selection
+            cols = st.columns(len(analysis_options))
+            for i, option in enumerate(analysis_options):
+                if cols[i].button(option, key=f"analysis_btn_{seq_idx}_{i}", use_container_width=True):
+                    st.session_state.active_analysis[seq_idx] = option
+            
+            st.markdown("<hr style='margin-top:0; margin-bottom:1.5rem;'>", unsafe_allow_html=True)
+
+            # Get the currently selected analysis view
+            selected_view = st.session_state.active_analysis[seq_idx]
+
+            # Render the selected analysis view on-demand
+            if selected_view == "🧬 Sequence":
+                with st.container():
+                    st.subheader("📊 Nucleotide Composition Analysis")
+                    comp_df = pd.DataFrame(list(composition['composition'].items()), columns=['Nucleotide', 'Count'])
+                    fig = px.pie(comp_df, values='Count', names='Nucleotide', title="Nucleotide Distribution", color_discrete_map={'A':'#FF6B6B', 'T':'#4ECDC4', 'G':'#45B7D1', 'C':'#96CEB4'})
+                    st.plotly_chart(fig, key=f'pie_distribution_{seq_idx}')
+                    st.subheader("🔤 Sequence Visualization")
+                    formatted_seq = create_sequence_visualization(sequence)
+                    st.markdown(f'<div class="dna-sequence">{formatted_seq}</div>', unsafe_allow_html=True)
+
+            elif selected_view == "🔍 Genes":
+                with st.container():
+                    st.subheader("🎯 Gene Identification & ORF Analysis")
                     if orfs:
-                        largest_orf = orfs[0]
-                        st.subheader("🏆 Largest ORF Details")
-                        
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.write(f"**Position:** {largest_orf['start']}-{largest_orf['end']}")
-                            st.write(f"**Length:** {largest_orf['length']} bp")
-                            st.write(f"**Strand:** {largest_orf['strand']}")
-                            st.write(f"**Frame:** {largest_orf['frame']}")
-                        
-                        with col2:
-                            st.write(f"**Protein Length:** {largest_orf['protein_length']} amino acids")
-                            protein_mw = largest_orf['protein_length'] * 110
-                            st.write(f"**Est. Molecular Weight:** {protein_mw:,} Da")
-                            st.write(f"**Type:** {'Membrane protein' if protein_mw > 30000 else 'Cytoplasmic protein'}")
-                
-                if genes_found:
-                    st.subheader("🧬 Potential Gene Matches")
-                    for gene in genes_found:
-                        st.markdown(f"""
-                        <div class="analysis-card">
-                            <h4>{gene['name']} ({gene['gene_id']})</h4>
-                            <p><strong>Function:</strong> {gene['function']}</p>
-                            <p><strong>Type:</strong> {gene['type']}</p>
-                            <p><strong>Confidence:</strong> {gene['confidence']:.0f}%</p>
-                        </div>
-                        """, unsafe_allow_html=True)
+                        st.success(f"🔍 Found {len(orfs)} Open Reading Frames")
+                        orf_df = pd.DataFrame([{'ORF': f"ORF_{i+1}", 'Start': o['start'], 'End': o['end'], 'Length (bp)': o['length'], 'Strand': o['strand'], 'Frame': o['frame'], 'Protein Length (aa)': o['protein_length']} for i, o in enumerate(orfs[:10])])
+                        st.dataframe(orf_df, use_container_width=True)
+                        fig = px.scatter(orf_df, x='Start', y='Protein Length (aa)', size='Length (bp)', color='Strand', title="Open Reading Frames Distribution", hover_data=['Frame'])
+                        st.plotly_chart(fig, key=f'orf_distribution_{seq_idx}')
+                    if genes_found:
+                        st.subheader("🧬 Potential Gene Matches")
+                        for gene in genes_found:
+                            st.markdown(f"""<div class="analysis-card"><h4>{gene['name']} ({gene['gene_id']})</h4><p><strong>Function:</strong> {gene['function']}</p><p><strong>Confidence:</strong> {gene['confidence']:.0f}%</p></div>""", unsafe_allow_html=True)
 
-            with tab3:
-                st.subheader("🧪 Protein Structure Prediction")
-                
-                if orfs:
-                    # Analyze proteins from ORFs
-                    for i, orf in enumerate(orfs[:3]):  # Top 3 ORFs
-                        st.markdown(f"---")
-                        st.markdown(f"#### 🔬 Analysis for Protein from ORF_{i+1}")
-                        
-                        protein_analysis = analyzer.predict_protein_structure(orf['protein_sequence'])
-                        
-                        if 'error' in protein_analysis:
-                            st.warning(f"Could not analyze protein from ORF_{i+1}: {protein_analysis['error']}")
-                            continue
-
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            st.metric("Protein Length", f"{protein_analysis['length']} aa")
-                            st.metric("Est. Mol. Weight", f"{int(protein_analysis['molecular_weight']):,} Da")
-                            
-                            st.markdown("**Predicted Domains:**")
-                            if protein_analysis['predicted_domains']:
-                                for domain in protein_analysis['predicted_domains']:
+            elif selected_view == "🧪 Protein":
+                with st.container():
+                    st.subheader("🧪 Protein Structure Prediction")
+                    if orfs:
+                        for i, orf in enumerate(orfs[:2]): # Show top 2 to keep it fast
+                            st.markdown(f"---")
+                            st.markdown(f"#### 🔬 Analysis for Protein from ORF_{i+1}")
+                            protein_analysis = analyzer.predict_protein_structure(orf['protein_sequence'])
+                            if 'error' in protein_analysis:
+                                st.warning(f"Could not analyze protein from ORF_{i+1}: {protein_analysis['error']}")
+                                continue
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.metric("Protein Length", f"{protein_analysis['length']} aa")
+                                st.metric("Est. Mol. Weight", f"{int(protein_analysis['molecular_weight']):,} Da")
+                                st.markdown("**Predicted Domains:**")
+                                for domain in protein_analysis.get('predicted_domains', []):
                                     st.markdown(f'<span class="protein-structure">{domain}</span>', unsafe_allow_html=True)
-                            else:
-                                st.write("None predicted.")
-
-                            st.markdown("**Secondary Structure:**")
-                            summary = protein_analysis['secondary_structure_summary']
-                            st.write(f"Helix: {summary['helix_percent']:.1f}%")
-                            st.write(f"Sheet: {summary['sheet_percent']:.1f}%")
-                            st.write(f"Coil: {summary['coil_percent']:.1f}%")
-
-                            st.markdown("**Predicted 2D Structure Map:**")
-                            structure_viz = visualize_protein_structure(protein_analysis['secondary_structure_sequence'])
-                            st.markdown(structure_viz, unsafe_allow_html=True)
-
-                        with col2:
-                            st.markdown("**Interactive 3D Structure (Simulated):**")
-                            pdb_string = analyzer.generate_pdb_from_structure(
-                                orf['protein_sequence'], protein_analysis['secondary_structure_sequence']
-                            )
-                            if pdb_string:
-                                render_3d_protein_structure(pdb_string)
-                            else:
-                                st.warning("Could not generate 3D structure.")
-
-                        # Amino acid composition chart
-                        if protein_analysis['composition']:
-                            aa_df = pd.DataFrame(list(protein_analysis['composition'].items()), 
-                                               columns=['Amino Acid', 'Count'])
-                            fig = px.bar(aa_df.sort_values('Count', ascending=False), x='Amino Acid', y='Count', 
-                                       title=f"Amino Acid Composition - ORF_{i+1}")
+                                st.markdown("**Predicted 2D Structure Map:**")
+                                structure_viz = visualize_protein_structure(protein_analysis['secondary_structure_sequence'])
+                                st.markdown(structure_viz, unsafe_allow_html=True)
+                            with col2:
+                                st.markdown("**Interactive 3D Structure (Simulated):**")
+                                pdb_string = analyzer.generate_pdb_from_structure(orf['protein_sequence'], protein_analysis['secondary_structure_sequence'])
+                                if pdb_string:
+                                    render_3d_protein_structure(pdb_string, height=350)
+                            aa_df = pd.DataFrame(list(protein_analysis['composition'].items()), columns=['Amino Acid', 'Count'])
+                            fig = px.bar(aa_df.sort_values('Count', ascending=False), x='Amino Acid', y='Count', title=f"Amino Acid Composition - ORF_{i+1}")
                             st.plotly_chart(fig, use_container_width=True, key=f'aa_comp_{seq_idx}_{i}')
-                else:
-                    st.info("No Open Reading Frames found to predict protein structures.")
-
-            with tab4:
-                st.subheader("🌿 Species Classification & Phylogenetics")
-                
-                if species_scores:
-                    # Species probability
-                    species_df = pd.DataFrame(list(species_scores.items()), 
-                                            columns=['Species', 'Probability'])
-                    species_df = species_df.sort_values('Probability', ascending=False)
-                    
-                    fig = px.bar(species_df, x='Species', y='Probability',
-                               title="Species Classification Probability",
-                               color='Probability', color_continuous_scale='viridis')
-                    st.plotly_chart(fig, key=f'species_chart_{seq_idx}')
-                    
-                    # Top classification
-                    top_species = species_df.iloc[0]
-                    confidence = top_species['Probability'] * 100
-                    
-                    st.success(f"🎯 **Most likely species:** {top_species['Species'].title()} ({confidence:.0f}% confidence)")
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.metric("Conservation Score", f"{evo_analysis['conservation_score']:.0f}/100")
-                    st.metric("Evolutionary Rate", evo_analysis['evolutionary_rate'])
-                
-                with col2:
-                    if evo_analysis['mutation_hotspots']:
-                        st.markdown("**Mutation Hotspots:**")
-                        for hotspot in evo_analysis['mutation_hotspots'][:3]:
-                            st.write(f"• {hotspot['motif']} (occurs {hotspot['frequency']} times)")
-
-            with tab5:
-                st.subheader("⚗️ Pharmacogenomics & Drug Targets")
-                
-                if pharma_analysis['drug_targets']:
-                    st.write(f"**Pharmacogenomic Score:** {pharma_analysis['pharmacogenomic_score']}/100")
-                    
-                    for target in pharma_analysis['drug_targets']:
-                        st.markdown(f"""
-                        <div class="analysis-card">
-                            <h4>{target['target']}</h4>
-                            <p><strong>Relevant Drugs:</strong> {', '.join(target['drugs'])}</p>
-                            <p><strong>Clinical Significance:</strong> {target['significance']}</p>
-                            <p><strong>Recommendation:</strong> {target['recommendation']}</p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                else:
-                    st.info("No significant pharmacogenomic markers detected in this sequence.")
-
-            with tab6:
-                st.subheader("🔬 Advanced Genomic Intelligence")
-                
-                # Create comprehensive analysis report
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.markdown("**🧬 Genomic Complexity Metrics**")
-                    
-                    st.write(f"• Shannon Entropy: {entropy:.3f}")
-                    st.write(f"• 3-mer Diversity: {unique_3mers}")
-                    st.write(f"• Max Homopolymer: {max_repeat}")
-                
-                with col2:
-                    st.markdown("**🎯 Functional Predictions**")
-                    
-                    # Predict function based on composition and structure
-                    predictions = []
-                    
-                    if gc_content > 55:
-                        predictions.append("Regulatory element")
-                    if len(orfs) > 0 and orfs[0]['length'] > 300:
-                        predictions.append("Protein-coding gene")
-                    if composition['cpg_count'] > len(sequence) * 0.02:
-                        predictions.append("CpG island / Promoter region")
-                    
-                    if predictions:
-                        for pred in predictions:
-                            st.write(f"• {pred}")
                     else:
-                        st.write("• Non-coding sequence")
-                
-                # Generate AI insights
-               # st.subheader("🤖 AI-Generated Insights")
-                
+                        st.info("No Open Reading Frames found to predict protein structures.")
 
+            elif selected_view == "🌿 Species":
+                with st.container():
+                    st.subheader("🌿 Species Classification & Phylogenetics")
+                    if species_scores:
+                        species_df = pd.DataFrame(list(species_scores.items()), columns=['Species', 'Probability']).sort_values('Probability', ascending=False)
+                        fig = px.bar(species_df, x='Species', y='Probability', title="Species Classification Probability", color='Probability', color_continuous_scale='viridis')
+                        st.plotly_chart(fig, key=f'species_chart_{seq_idx}')
+                        top_species = species_df.iloc[0]
+                        st.success(f"🎯 **Most likely species:** {top_species['Species'].title()} ({top_species['Probability']*100:.0f}% confidence)")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("Conservation Score", f"{evo_analysis['conservation_score']:.0f}/100")
+                    with col2:
+                        st.metric("Evolutionary Rate", evo_analysis['evolutionary_rate'])
 
-            with tab7:
-                st.subheader("✂️ CRISPR/Cas9 Guide RNA Design")
-                
-                if crispr_guides:
-                    st.success(f"✅ Found {len(crispr_guides)} potential gRNA candidates for gene editing.")
-                    
-                    guide_df = pd.DataFrame(crispr_guides)
-                    
-                    # Display table
-                    st.markdown("#### Top gRNA Candidates (ranked by score)")
-                    st.dataframe(guide_df[[
-                        'sequence', 'location', 'strand', 'gc_content', 
-                        'on_target_score', 'off_target_hits', 'overall_score'
-                    ]].rename(columns={
-                        'sequence': 'Guide Sequence (20nt)',
-                        'location': 'Start Position',
-                        'strand': 'Strand',
-                        'gc_content': 'GC %',
-                        'on_target_score': 'On-Target Score',
-                        'off_target_hits': 'Off-Target Hits',
-                        'overall_score': 'Overall Score'
-                    }).style.format({'GC %': '{:.1f}', 'On-Target Score': '{:.1f}', 'Overall Score': '{:.1f}'}))
-                    
-                    # Visualization of guide locations
-                    st.markdown("#### gRNA Location on Genome")
-                    fig = px.scatter(guide_df.head(20), x='location', y='overall_score', 
-                                   color='strand', size='on_target_score',
-                                   title="Top 20 gRNA Candidates by Location and Score",
-                                   hover_data=['sequence'],
-                                   labels={'location': 'Position on Sequence', 'overall_score': 'Overall Score'})
-                    fig.update_layout(xaxis_range=[0, len(sequence)])
-                    st.plotly_chart(fig, key=f'gNa_distribution_{seq_idx}')
-                    
-                    st.info("💡 **On-Target Score:** A heuristic score based on GC content and sequence features. Higher is better.  \n**Off-Target Hits:** Number of identical sequences found elsewhere. Lower is better.")
-                    
-                else:
-                    st.warning("No suitable CRISPR gRNA targets found based on current criteria (PAM: NGG).")
+            elif selected_view == "⚗️ Targets":
+                with st.container():
+                    st.subheader("⚗️ Pharmacogenomics & Drug Targets")
+                    if pharma_analysis['drug_targets']:
+                        st.metric("Pharmacogenomic Score", f"{pharma_analysis['pharmacogenomic_score']}/100")
+                        for target in pharma_analysis['drug_targets']:
+                            st.markdown(f"""<div class="analysis-card"><h4>{target['target']}</h4><p><strong>Relevant Drugs:</strong> {', '.join(target['drugs'])}</p><p><strong>Recommendation:</strong> {target['recommendation']}</p></div>""", unsafe_allow_html=True)
+                    else:
+                        st.info("No significant pharmacogenomic markers detected in this sequence.")
+
+            elif selected_view == "🔬 Advanced":
+                with st.container():
+                    st.subheader("🔬 Advanced Genomic Intelligence")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.markdown("**🧬 Genomic Complexity Metrics**")
+                        st.write(f"• Shannon Entropy: {entropy:.3f}")
+                        st.write(f"• 3-mer Diversity: {unique_3mers}")
+                        st.write(f"• Max Homopolymer: {max_repeat}")
+                    with col2:
+                        st.markdown("**🎯 Functional Predictions**")
+                        predictions = []
+                        if gc_content > 55: predictions.append("Regulatory element")
+                        if len(orfs) > 0 and orfs[0]['length'] > 300: predictions.append("Protein-coding gene")
+                        if composition['cpg_count'] > len(sequence) * 0.02: predictions.append("CpG island / Promoter region")
+                        if predictions:
+                            for pred in predictions: st.write(f"• {pred}")
+                        else:
+                            st.write("• Non-coding sequence")
+
+            elif selected_view == "✂️ CRISPR":
+                with st.container():
+                    st.subheader("✂️ CRISPR/Cas9 Guide RNA Design")
+                    if crispr_guides:
+                        st.success(f"✅ Found {len(crispr_guides)} potential gRNA candidates for gene editing.")
+                        guide_df = pd.DataFrame(crispr_guides)
+                        st.markdown("#### Top gRNA Candidates (ranked by score)")
+                        st.dataframe(guide_df[['sequence', 'location', 'strand', 'gc_content', 'on_target_score', 'off_target_hits', 'overall_score']].rename(columns={'sequence': 'Guide Sequence (20nt)', 'location': 'Start Position', 'strand': 'Strand', 'gc_content': 'GC %', 'on_target_score': 'On-Target Score', 'off_target_hits': 'Off-Target Hits', 'overall_score': 'Overall Score'}).style.format({'GC %': '{:.1f}', 'On-Target Score': '{:.1f}', 'Overall Score': '{:.1f}'}))
+                        st.markdown("#### gRNA Location on Genome")
+                        fig = px.scatter(guide_df.head(20), x='location', y='overall_score', color='strand', size='on_target_score', title="Top 20 gRNA Candidates by Location and Score", hover_data=['sequence'], labels={'location': 'Position on Sequence', 'overall_score': 'Overall Score'})
+                        fig.update_layout(xaxis_range=[0, len(sequence)])
+                        st.plotly_chart(fig, key=f'gRNA_distribution_{seq_idx}')
+                    else:
+                        st.warning("No suitable CRISPR gRNA targets found based on current criteria (PAM: NGG).")
 
             # =================================================================
             # == Beta Features Section                                      ==
