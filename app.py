@@ -1290,8 +1290,29 @@ def main():
         # Display sequence info
         st.success(f"✅ Successfully loaded {parsed_data['total_sequences']} DNA sequence(s)")
         
-        # Process each sequence
-        for seq_idx, seq_data in enumerate(parsed_data['sequences']):
+        # Add sequence range selector
+        total_sequences = parsed_data['total_sequences']
+        start_index = 0
+        end_index = total_sequences
+
+        if total_sequences > 1:
+            st.markdown("---")
+            st.subheader("🔬 Select Sequence Range to Analyze")
+            col1, col2, _ = st.columns([1, 1, 2])
+            with col1:
+                start_seq = st.number_input("Start Sequence", min_value=1, max_value=total_sequences, value=1, step=1, key="start_seq_range")
+            with col2:
+                end_seq = st.number_input("End Sequence", min_value=start_seq, max_value=total_sequences, value=min(10, total_sequences), step=1, key="end_seq_range")
+            
+            # Adjust for 0-based indexing for slicing
+            start_index = start_seq - 1
+            end_index = end_seq
+            
+            st.info(f"Displaying sequences **{start_seq} to {end_seq}** (out of {total_sequences} total). Adjust the range to analyze different subsets.")
+
+        # Process each sequence in the selected range
+        for seq_idx in range(start_index, end_index):
+            seq_data = parsed_data['sequences'][seq_idx]
             sequence = seq_data['sequence']
             class_label = seq_data['class']
             
