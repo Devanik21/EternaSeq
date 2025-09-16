@@ -913,122 +913,124 @@ class DNAAnalyzer:
             })
         return {'designs': designs}
 
-    def analyze_telomere_length(self, sequence: str) -> Dict:
-        """Analyzes telomere length and repeat patterns."""
-        telomere_repeat = 'TTAGGG'
-        repeats = re.findall(f'({telomere_repeat})+', sequence)
+    def analyze_kmer_frequency(self, sequence: str, k: int) -> Dict:
+        """Analyzes the frequency of k-mers in the sequence."""
+        if len(sequence) < k:
+            return {'kmer_counts': {}}
+        kmers = Counter([sequence[i:i+k] for i in range(len(sequence) - k + 1)])
+        total_kmers = sum(kmers.values())
         
-        if not repeats:
-            return {
-                'estimated_length': 0,
-                'repeat_count': 0,
-                'erosion_risk': 'N/A',
-                'repeat_locations': []
-            }
-            
-        total_length = sum(len(r[0]) for r in repeats)
-        repeat_count = len(repeats)
-        
-        # Find locations for visualization
-        repeat_locations = []
-        for match in re.finditer(f'({telomere_repeat})+', sequence):
-            repeat_locations.append({
-                'start': match.start(),
-                'length': len(match.group(0))
-            })
-            
-        # Simulated erosion risk
-        erosion_risk = 'High' if repeat_count < 5 else 'Moderate' if repeat_count < 10 else 'Low'
+        kmer_freq = {kmer: count / total_kmers for kmer, count in kmers.items()}
         
         return {
-            'estimated_length': total_length,
-            'repeat_count': repeat_count,
-            'erosion_risk': erosion_risk,
-            'repeat_locations': repeat_locations
+            'k': k,
+            'kmer_counts': dict(kmers.most_common()),
+            'kmer_frequencies': {kmer: freq for kmer, freq in sorted(kmer_freq.items(), key=lambda item: item[1], reverse=True)}
         }
 
-    def detect_senescence_markers(self, sequence: str) -> Dict:
-        """Detects markers associated with cellular senescence."""
-        senescence_db = {
-            'CDKN2A_p16': {'motif': 'CGCGCTGGG', 'impact': 85, 'function': 'Tumor suppressor, cell cycle arrest'},
-            'CDKN1A_p21': {'motif': 'GAACATCTCAG', 'impact': 70, 'function': 'Cyclin-dependent kinase inhibitor'},
-            'LMNB1_down': {'motif': 'CTGCAGCTGCAGC', 'impact': 60, 'function': 'Lamin-B1 downregulation marker'}
+    def analyze_repeats(self, sequence: str) -> Dict:
+        """Analyzes simple sequence repeats (microsatellites)."""
+        repeats = []
+        # Di-nucleotide repeats (at least 5 repeats)
+        for n1 in 'ATCG':
+            for n2 in 'ATCG':
+                motif = n1 + n2
+                if motif == self.reverse_complement(motif): continue # Avoid redundant e.g. AT vs TA
+                for match in re.finditer(f'({motif}){{5,}}', sequence):
+                    repeats.append({
+                        'type': 'Di-nucleotide',
+                        'motif': motif,
+                        'start': match.start(),
+                        'end': match.end(),
+                        'length': match.end() - match.start(),
+                        'repetitions': (match.end() - match.start()) // 2
+                    })
+        # Tri-nucleotide repeats (at least 4 repeats)
+        for n1 in 'ATCG':
+            for n2 in 'ATCG':
+                for n3 in 'ATCG':
+                    motif = n1 + n2 + n3
+                    for match in re.finditer(f'({motif}){{4,}}', sequence):
+                        repeats.append({
+                            'type': 'Tri-nucleotide',
+                            'motif': motif,
+                            'start': match.start(),
+                            'end': match.end(),
+                            'length': match.end() - match.start(),
+                            'repetitions': (match.end() - match.start()) // 3
+                        })
+        return {
+            'repeats_found': len(repeats),
+            'repeats': sorted(repeats, key=lambda x: x['length'], reverse=True)
         }
-        
-        markers_found = []
-        for marker_id, info in senescence_db.items():
-            for match in re.finditer(info['motif'], sequence):
-                markers_found.append({
-                    'marker_id': marker_id,
+
+    def predict_tfbs(self, sequence: str) -> Dict:
+        """Predicts Transcription Factor Binding Sites (TFBS)."""
+        tfbs_db = {
+            'SP1': 'GGGCGG', 'AP-1': 'TGACTCA', 'NF-kB': 'GGGACTTTCC',
+            'CREB': 'TGACGTCA', 'MYC': 'CACGTG', 'CTCF': 'CCCTCCTCCCC',
+            'E2F': 'TTTCGCGC', 'SRF': 'CCATATATGG'
+        }
+        sites = []
+        for tf, motif in tfbs_db.items():
+            for match in re.finditer(motif, sequence):
+                sites.append({
+                    'tf': tf,
+                    'motif': motif,
                     'start': match.start(),
                     'end': match.end(),
-                    'impact_score': info['impact'] + np.random.uniform(-5, 5),
-                    'function': info['function']
+                    'strand': '+'
                 })
-        
-        overall_score = sum(m['impact_score'] for m in markers_found) / len(senescence_db) if markers_found else 0
-        
+            # Also check reverse complement
+            rev_comp_motif = self.reverse_complement(motif)
+            for match in re.finditer(rev_comp_motif, sequence):
+                sites.append({
+                    'tf': tf,
+                    'motif': rev_comp_motif,
+                    'start': match.start(),
+                    'end': match.end(),
+                    'strand': '-'
+                })
         return {
-            'markers_found': len(markers_found),
-            'markers': sorted(markers_found, key=lambda x: x['impact_score'], reverse=True),
-            'senescence_burden_score': min(100, overall_score)
+            'sites_found': len(sites),
+            'sites': sorted(sites, key=lambda x: x['start'])
         }
 
-    def profile_longevity_genes(self, sequence: str) -> Dict:
-        """Profiles the sequence for variants associated with longevity."""
-        longevity_variants = {
-            'FOXO3_G_allele': {'motif': 'ACGTACGTACGT', 'effect': 'Increased Longevity', 'score': 30},
-            'SIRT1_C_allele': {'motif': 'GATTACAGATTACA', 'effect': 'Metabolic Health', 'score': 25},
-            'APOE_e2_allele': {'motif': 'TGCGGCCGC', 'effect': 'Cardioprotective', 'score': 20}
-        }
+    def analyze_codon_usage(self, orfs: List[Dict]) -> Dict:
+        """Analyzes codon usage bias across all provided ORFs."""
+        if not orfs:
+            return {'total_codons': 0, 'usage_table': pd.DataFrame()}
+            
+        codon_counts = Counter()
+        total_codons = 0
         
-        profile = []
-        total_score = 50 # Base score
+        for orf in orfs:
+            dna = orf['dna_sequence']
+            for i in range(0, len(dna) - 3, 3): # Exclude stop codon
+                codon = dna[i:i+3]
+                codon_counts[codon] += 1
+                total_codons += 1
+                
+        if total_codons == 0:
+            return {'total_codons': 0, 'usage_table': pd.DataFrame()}
+            
+        # Create a DataFrame for visualization
+        usage_data = []
+        for codon, aa in self.codon_table.items():
+            if aa == '*': continue # Skip stop codons for usage analysis
+            count = codon_counts.get(codon, 0)
+            usage_data.append({'codon': codon, 'amino_acid': aa, 'count': count})
         
-        for variant_id, info in longevity_variants.items():
-            if info['motif'] in sequence:
-                total_score += info['score']
-                profile.append({
-                    'variant_id': variant_id,
-                    'effect': info['effect'],
-                    'contribution': info['score']
-                })
+        usage_df = pd.DataFrame(usage_data)
         
-        return {
-            'profile': profile,
-            'longevity_score': min(100, total_score),
-            'summary': 'Favorable' if total_score > 75 else 'Neutral' if total_score > 50 else 'Standard'
-        }
-
-    def analyze_mtdna_integrity(self, sequence: str) -> Dict:
-        """Analyzes mitochondrial DNA integrity for signs of aging."""
-        # Simplified: Look for a common deletion pattern
-        common_deletion_start_motif = 'ACCCCCCTCCCC'
-        common_deletion_end_motif = 'CCTACCCCTCAC'
-        
-        deletions = []
-        start_match = re.search(common_deletion_start_motif, sequence)
-        if start_match:
-            end_match = re.search(common_deletion_end_motif, sequence[start_match.end():])
-            if end_match:
-                deletions.append({
-                    'type': 'Common Deletion (4977bp-like)',
-                    'start': start_match.start(),
-                    'end': start_match.end() + end_match.end(),
-                    'size': (start_match.end() + end_match.end()) - start_match.start(),
-                    'severity': 'High'
-                })
-        
-        # Simulated point mutation analysis
-        mutation_rate = sequence.count('N') / len(sequence) if len(sequence) > 0 else 0
-        integrity_score = max(0, 100 - (len(deletions) * 40) - (mutation_rate * 500))
+        # Calculate frequency within each amino acid group
+        aa_totals = usage_df.groupby('amino_acid')['count'].transform('sum')
+        usage_df['frequency'] = (usage_df['count'] / aa_totals).fillna(0)
         
         return {
-            'deletions_found': len(deletions),
-            'deletions': deletions,
-            'point_mutation_rate': mutation_rate,
-            'integrity_score': integrity_score,
-            'assessment': 'Good' if integrity_score > 70 else 'Moderate' if integrity_score > 40 else 'Poor'
+            'total_codons': total_codons,
+            'usage_table': usage_df,
+            'raw_counts': dict(codon_counts)
         }
 
     def ai_drug_discovery(self, all_analyses_summary: List[Dict], api_key: str) -> str:
@@ -1235,10 +1237,10 @@ def main():
         - **TG**: ⚗️ Drug Targets
         - **AD**: 🔬 Advanced Analysis
         - **CR**: ✂️ CRISPR Gene Editing
-        - **TL**: 🕰️ Telomere Analysis
-        - **SM**: 🧫 Senescence Markers
-        - **LG**: 🌟 Longevity Genes
-        - **MI**: ⚡ mtDNA Integrity
+        - **KA**: 📊 K-mer Analysis
+        - **RA**: 🔁 Repeat Analysis
+        - **BS**: 🔗 Binding Sites
+        - **CU**: 🧬 Codon Usage
         """)
 
 
@@ -1366,11 +1368,11 @@ def main():
                     reg_network_results = analyzer.infer_regulatory_network(sequence, orfs)
                 elif selected_feature == "Synthetic Biology Circuit Design":
                     synth_bio_results = analyzer.design_synthetic_circuits(sequence, orfs)
-                # NEW ANALYSES
-                telomere_results = analyzer.analyze_telomere_length(sequence)
-                senescence_results = analyzer.detect_senescence_markers(sequence)
-                longevity_results = analyzer.profile_longevity_genes(sequence)
-                mtdna_results = analyzer.analyze_mtdna_integrity(sequence)
+                
+                repeat_results = analyzer.analyze_repeats(sequence)
+                tfbs_results = analyzer.predict_tfbs(sequence)
+                codon_usage_results = analyzer.analyze_codon_usage(orfs)
+
                 # Metrics for advanced tab
                 entropy = -sum(p * np.log2(p) for p in [sequence.count(n)/len(sequence) for n in 'ATCG'] if p > 0)
                 words_3 = [sequence[i:i+3] for i in range(len(sequence)-2)]
@@ -1418,8 +1420,8 @@ def main():
             # NEW: Analysis view selector
             analysis_options = [
                 "SQ", "GN", "PR", "SP", 
-                "TG", "AD", "CR", "TL",
-                "SM", "LG", "MI"
+                "TG", "AD", "CR", "KA",
+                "RA", "BS", "CU"
             ]
 
             # Initialize session state for the active analysis view for each sequence
@@ -1556,85 +1558,83 @@ def main():
                     else:
                         st.warning("No suitable CRISPR gRNA targets found based on current criteria (PAM: NGG).")
 
-            elif selected_view == "TL":
+            elif selected_view == "KA":
                 with st.container():
-                    st.subheader("🕰️ Telomere Length Analysis")
-                    if telomere_results and telomere_results['repeat_count'] > 0:
-                        col1, col2, col3 = st.columns(3)
-                        col1.metric("Estimated Telomere Length", f"{telomere_results['estimated_length']} bp")
-                        col2.metric("Telomeric Repeats", telomere_results['repeat_count'])
-                        col3.metric("Erosion Risk", telomere_results['erosion_risk'])
+                    st.subheader("📊 K-mer Frequency Analysis")
+                    k = st.slider("Select K-mer size (k)", min_value=2, max_value=8, value=4, key=f'kmer_slider_{seq_idx}')
+                    
+                    kmer_results = analyzer.analyze_kmer_frequency(sequence, k)
+                    
+                    if kmer_results['kmer_counts']:
+                        st.metric(f"Total Unique {k}-mers", len(kmer_results['kmer_counts']))
                         
-                        st.markdown("#### Telomeric Repeat Distribution")
-                        loc_df = pd.DataFrame(telomere_results['repeat_locations'])
-                        fig = px.scatter(loc_df, x='start', y='length',
-                                       title="Location and Size of Telomeric Repeats",
-                                       labels={'start': 'Position on Sequence', 'length': 'Repeat Length (bp)'},
-                                       size='length', hover_data=['start', 'length'])
+                        kmer_df = pd.DataFrame(list(kmer_results['kmer_counts'].items()), columns=['K-mer', 'Count']).head(20)
+                        
+                        fig = px.bar(kmer_df, x='K-mer', y='Count',
+                                     title=f"Top 20 Most Frequent {k}-mers",
+                                     labels={'K-mer': f'{k}-mer Sequence', 'Count': 'Frequency Count'})
+                        st.plotly_chart(fig, use_container_width=True, key=f'kmer_analysis_{seq_idx}')
+                        
+                        with st.expander("Full K-mer Counts Table"):
+                            st.dataframe(pd.DataFrame(list(kmer_results['kmer_counts'].items()), columns=['K-mer', 'Count']))
+                    else:
+                        st.info(f"Sequence is too short to calculate {k}-mers.")
+
+            elif selected_view == "RA":
+                with st.container():
+                    st.subheader("🔁 Simple Repeat Analysis")
+                    if repeat_results and repeat_results['repeats_found'] > 0:
+                        st.metric("Total Repeat Regions Found", repeat_results['repeats_found'])
+                        
+                        repeats_df = pd.DataFrame(repeat_results['repeats'])
+                        st.dataframe(repeats_df)
+                        
+                        fig = px.scatter(repeats_df, x='start', y='length', color='type', size='repetitions',
+                                       title="Distribution of Simple Sequence Repeats (SSRs)",
+                                       labels={'start': 'Start Position', 'length': 'Total Length (bp)'},
+                                       hover_data=['motif', 'repetitions'])
                         fig.update_layout(xaxis_range=[0, len(sequence)])
-                        st.plotly_chart(fig, use_container_width=True, key=f'telomere_dist_{seq_idx}')
+                        st.plotly_chart(fig, use_container_width=True, key=f'repeat_analysis_{seq_idx}')
                     else:
-                        st.info("No significant telomeric repeat sequences (TTAGGG) found.")
+                        st.success("No significant simple sequence repeats found.")
 
-            elif selected_view == "SM":
+            elif selected_view == "BS":
                 with st.container():
-                    st.subheader("🧫 Cellular Senescence Marker Detection")
-                    if senescence_results:
-                        st.metric("Senescence Burden Score", f"{senescence_results['senescence_burden_score']:.1f} / 100")
+                    st.subheader("🔗 Transcription Factor Binding Site (TFBS) Prediction")
+                    if tfbs_results and tfbs_results['sites_found'] > 0:
+                        st.metric("Potential Binding Sites Found", tfbs_results['sites_found'])
                         
-                        if senescence_results['markers']:
-                            st.markdown("#### Detected Senescence-Associated Markers")
-                            marker_df = pd.DataFrame(senescence_results['markers'])
-                            st.dataframe(marker_df.style.format({'impact_score': '{:.1f}'}))
-                            
-                            fig = px.bar(marker_df, x='marker_id', y='impact_score', color='marker_id',
-                                         title="Impact of Detected Senescence Markers",
-                                         labels={'marker_id': 'Marker', 'impact_score': 'Impact Score'},
-                                         hover_data=['function'])
-                            st.plotly_chart(fig, use_container_width=True, key=f'senescence_markers_{seq_idx}')
-                        else:
-                            st.success("No major senescence-associated markers detected.")
+                        sites_df = pd.DataFrame(tfbs_results['sites'])
+                        st.dataframe(sites_df)
+                        
+                        tf_counts = sites_df['tf'].value_counts().reset_index()
+                        tf_counts.columns = ['Transcription Factor', 'Count']
+                        
+                        fig_counts = px.bar(tf_counts, x='Transcription Factor', y='Count', title="Predicted TFBS Counts per Factor", color='Transcription Factor')
+                        st.plotly_chart(fig_counts, use_container_width=True, key=f'tfbs_counts_{seq_idx}')
                     else:
-                        st.warning("Senescence marker analysis could not be performed.")
+                        st.info("No TFBS motifs from the database were found in the sequence.")
 
-            elif selected_view == "LG":
+            elif selected_view == "CU":
                 with st.container():
-                    st.subheader("🌟 Longevity Gene Profiling")
-                    if longevity_results:
-                        st.metric("Overall Longevity Score", f"{longevity_results['longevity_score']:.0f} / 100", help="Score based on presence of known longevity-associated variants. Base score is 50.")
+                    st.subheader("🧬 Codon Usage Analysis")
+                    if codon_usage_results and codon_usage_results['total_codons'] > 0:
+                        st.metric("Total Codons Analyzed (from ORFs)", f"{codon_usage_results['total_codons']:,}")
                         
-                        if longevity_results['profile']:
-                            st.markdown("#### Favorable Longevity Variants Found")
-                            profile_df = pd.DataFrame(longevity_results['profile'])
-                            st.dataframe(profile_df)
-                            
-                            fig = px.pie(profile_df, values='contribution', names='variant_id',
-                                         title="Contribution of Variants to Longevity Score",
-                                         hover_data=['effect'])
-                            st.plotly_chart(fig, use_container_width=True, key=f'longevity_profile_{seq_idx}')
-                        else:
-                            st.info("No known favorable longevity-associated variants were detected in this sequence.")
+                        usage_df = codon_usage_results['usage_table']
+                        
+                        st.markdown("#### Codon Usage Frequency Heatmap")
+                        st.info("This heatmap shows the relative frequency of each codon for a given amino acid. Brighter colors indicate preferred codons.")
+                        
+                        heatmap_df = usage_df.pivot(index='amino_acid', columns='codon', values='frequency').fillna(0)
+                        
+                        fig_heatmap = px.imshow(heatmap_df, labels=dict(x="Codon", y="Amino Acid", color="Frequency"), title="Codon Usage Frequency per Amino Acid", color_continuous_scale="Viridis")
+                        st.plotly_chart(fig_heatmap, use_container_width=True, key=f'codon_heatmap_{seq_idx}')
+                        
+                        with st.expander("Raw Codon Usage Table"):
+                            st.dataframe(usage_df.sort_values(by=['amino_acid', 'count'], ascending=[True, False]))
                     else:
-                        st.warning("Longevity gene profiling could not be performed.")
-
-            elif selected_view == "MI":
-                with st.container():
-                    st.subheader("⚡ Mitochondrial DNA (mtDNA) Integrity Analysis")
-                    if mtdna_results:
-                        col1, col2 = st.columns(2)
-                        col1.metric("mtDNA Integrity Score", f"{mtdna_results['integrity_score']:.1f} / 100", help="A higher score indicates fewer deletions and mutations.")
-                        col2.metric("Overall Assessment", mtdna_results['assessment'])
-                        
-                        if mtdna_results['deletions']:
-                            st.markdown("#### Detected mtDNA Deletions")
-                            deletions_df = pd.DataFrame(mtdna_results['deletions'])
-                            st.dataframe(deletions_df)
-                        else:
-                            st.success("No common mtDNA deletions were detected.")
-                        
-                        st.info(f"**Point Mutation Rate (Simulated):** {mtdna_results['point_mutation_rate']:.4%}. This rate contributes to the integrity score.")
-                    else:
-                        st.warning("mtDNA integrity analysis could not be performed.")
+                        st.info("No ORFs found, so codon usage cannot be calculated.")
 
             # =================================================================
             # == Beta Features Section                                      ==
