@@ -913,6 +913,124 @@ class DNAAnalyzer:
             })
         return {'designs': designs}
 
+    def analyze_telomere_length(self, sequence: str) -> Dict:
+        """Analyzes telomere length and repeat patterns."""
+        telomere_repeat = 'TTAGGG'
+        repeats = re.findall(f'({telomere_repeat})+', sequence)
+        
+        if not repeats:
+            return {
+                'estimated_length': 0,
+                'repeat_count': 0,
+                'erosion_risk': 'N/A',
+                'repeat_locations': []
+            }
+            
+        total_length = sum(len(r[0]) for r in repeats)
+        repeat_count = len(repeats)
+        
+        # Find locations for visualization
+        repeat_locations = []
+        for match in re.finditer(f'({telomere_repeat})+', sequence):
+            repeat_locations.append({
+                'start': match.start(),
+                'length': len(match.group(0))
+            })
+            
+        # Simulated erosion risk
+        erosion_risk = 'High' if repeat_count < 5 else 'Moderate' if repeat_count < 10 else 'Low'
+        
+        return {
+            'estimated_length': total_length,
+            'repeat_count': repeat_count,
+            'erosion_risk': erosion_risk,
+            'repeat_locations': repeat_locations
+        }
+
+    def detect_senescence_markers(self, sequence: str) -> Dict:
+        """Detects markers associated with cellular senescence."""
+        senescence_db = {
+            'CDKN2A_p16': {'motif': 'CGCGCTGGG', 'impact': 85, 'function': 'Tumor suppressor, cell cycle arrest'},
+            'CDKN1A_p21': {'motif': 'GAACATCTCAG', 'impact': 70, 'function': 'Cyclin-dependent kinase inhibitor'},
+            'LMNB1_down': {'motif': 'CTGCAGCTGCAGC', 'impact': 60, 'function': 'Lamin-B1 downregulation marker'}
+        }
+        
+        markers_found = []
+        for marker_id, info in senescence_db.items():
+            for match in re.finditer(info['motif'], sequence):
+                markers_found.append({
+                    'marker_id': marker_id,
+                    'start': match.start(),
+                    'end': match.end(),
+                    'impact_score': info['impact'] + np.random.uniform(-5, 5),
+                    'function': info['function']
+                })
+        
+        overall_score = sum(m['impact_score'] for m in markers_found) / len(senescence_db) if markers_found else 0
+        
+        return {
+            'markers_found': len(markers_found),
+            'markers': sorted(markers_found, key=lambda x: x['impact_score'], reverse=True),
+            'senescence_burden_score': min(100, overall_score)
+        }
+
+    def profile_longevity_genes(self, sequence: str) -> Dict:
+        """Profiles the sequence for variants associated with longevity."""
+        longevity_variants = {
+            'FOXO3_G_allele': {'motif': 'ACGTACGTACGT', 'effect': 'Increased Longevity', 'score': 30},
+            'SIRT1_C_allele': {'motif': 'GATTACAGATTACA', 'effect': 'Metabolic Health', 'score': 25},
+            'APOE_e2_allele': {'motif': 'TGCGGCCGC', 'effect': 'Cardioprotective', 'score': 20}
+        }
+        
+        profile = []
+        total_score = 50 # Base score
+        
+        for variant_id, info in longevity_variants.items():
+            if info['motif'] in sequence:
+                total_score += info['score']
+                profile.append({
+                    'variant_id': variant_id,
+                    'effect': info['effect'],
+                    'contribution': info['score']
+                })
+        
+        return {
+            'profile': profile,
+            'longevity_score': min(100, total_score),
+            'summary': 'Favorable' if total_score > 75 else 'Neutral' if total_score > 50 else 'Standard'
+        }
+
+    def analyze_mtdna_integrity(self, sequence: str) -> Dict:
+        """Analyzes mitochondrial DNA integrity for signs of aging."""
+        # Simplified: Look for a common deletion pattern
+        common_deletion_start_motif = 'ACCCCCCTCCCC'
+        common_deletion_end_motif = 'CCTACCCCTCAC'
+        
+        deletions = []
+        start_match = re.search(common_deletion_start_motif, sequence)
+        if start_match:
+            end_match = re.search(common_deletion_end_motif, sequence[start_match.end():])
+            if end_match:
+                deletions.append({
+                    'type': 'Common Deletion (4977bp-like)',
+                    'start': start_match.start(),
+                    'end': start_match.end() + end_match.end(),
+                    'size': (start_match.end() + end_match.end()) - start_match.start(),
+                    'severity': 'High'
+                })
+        
+        # Simulated point mutation analysis
+        mutation_rate = sequence.count('N') / len(sequence) if len(sequence) > 0 else 0
+        integrity_score = max(0, 100 - (len(deletions) * 40) - (mutation_rate * 500))
+        
+        return {
+            'deletions_found': len(deletions),
+            'deletions': deletions,
+            'point_mutation_rate': mutation_rate,
+            'integrity_score': integrity_score,
+            'assessment': 'Good' if integrity_score > 70 else 'Moderate' if integrity_score > 40 else 'Poor'
+        }
+
     def ai_drug_discovery(self, all_analyses_summary: List[Dict], api_key: str) -> str:
         """Uses Gemini to generate drug discovery insights based on a summary of all sequences."""
         if not api_key:
@@ -1117,6 +1235,10 @@ def main():
         - **TG**: ⚗️ Drug Targets
         - **AD**: 🔬 Advanced Analysis
         - **CR**: ✂️ CRISPR Gene Editing
+        - **TL**: 🕰️ Telomere Analysis
+        - **SM**: 🧫 Senescence Markers
+        - **LG**: 🌟 Longevity Genes
+        - **MI**: ⚡ mtDNA Integrity
         """)
 
 
@@ -1215,6 +1337,11 @@ def main():
                     reg_network_results = analyzer.infer_regulatory_network(sequence, orfs)
                 elif selected_feature == "Synthetic Biology Circuit Design":
                     synth_bio_results = analyzer.design_synthetic_circuits(sequence, orfs)
+                # NEW ANALYSES
+                telomere_results = analyzer.analyze_telomere_length(sequence)
+                senescence_results = analyzer.detect_senescence_markers(sequence)
+                longevity_results = analyzer.profile_longevity_genes(sequence)
+                mtdna_results = analyzer.analyze_mtdna_integrity(sequence)
                 # Metrics for advanced tab
                 entropy = -sum(p * np.log2(p) for p in [sequence.count(n)/len(sequence) for n in 'ATCG'] if p > 0)
                 words_3 = [sequence[i:i+3] for i in range(len(sequence)-2)]
@@ -1262,7 +1389,8 @@ def main():
             # NEW: Analysis view selector
             analysis_options = [
                 "SQ", "GN", "PR", "SP", 
-                "TG", "AD", "CR"
+                "TG", "AD", "CR", "TL",
+                "SM", "LG", "MI"
             ]
 
             # Initialize session state for the active analysis view for each sequence
@@ -1398,6 +1526,86 @@ def main():
                         st.plotly_chart(fig, key=f'gRNA_distribution_{seq_idx}')
                     else:
                         st.warning("No suitable CRISPR gRNA targets found based on current criteria (PAM: NGG).")
+
+            elif selected_view == "TL":
+                with st.container():
+                    st.subheader("🕰️ Telomere Length Analysis")
+                    if telomere_results and telomere_results['repeat_count'] > 0:
+                        col1, col2, col3 = st.columns(3)
+                        col1.metric("Estimated Telomere Length", f"{telomere_results['estimated_length']} bp")
+                        col2.metric("Telomeric Repeats", telomere_results['repeat_count'])
+                        col3.metric("Erosion Risk", telomere_results['erosion_risk'])
+                        
+                        st.markdown("#### Telomeric Repeat Distribution")
+                        loc_df = pd.DataFrame(telomere_results['repeat_locations'])
+                        fig = px.scatter(loc_df, x='start', y='length',
+                                       title="Location and Size of Telomeric Repeats",
+                                       labels={'start': 'Position on Sequence', 'length': 'Repeat Length (bp)'},
+                                       size='length', hover_data=['start', 'length'])
+                        fig.update_layout(xaxis_range=[0, len(sequence)])
+                        st.plotly_chart(fig, use_container_width=True, key=f'telomere_dist_{seq_idx}')
+                    else:
+                        st.info("No significant telomeric repeat sequences (TTAGGG) found.")
+
+            elif selected_view == "SM":
+                with st.container():
+                    st.subheader("🧫 Cellular Senescence Marker Detection")
+                    if senescence_results:
+                        st.metric("Senescence Burden Score", f"{senescence_results['senescence_burden_score']:.1f} / 100")
+                        
+                        if senescence_results['markers']:
+                            st.markdown("#### Detected Senescence-Associated Markers")
+                            marker_df = pd.DataFrame(senescence_results['markers'])
+                            st.dataframe(marker_df.style.format({'impact_score': '{:.1f}'}))
+                            
+                            fig = px.bar(marker_df, x='marker_id', y='impact_score', color='marker_id',
+                                         title="Impact of Detected Senescence Markers",
+                                         labels={'marker_id': 'Marker', 'impact_score': 'Impact Score'},
+                                         hover_data=['function'])
+                            st.plotly_chart(fig, use_container_width=True, key=f'senescence_markers_{seq_idx}')
+                        else:
+                            st.success("No major senescence-associated markers detected.")
+                    else:
+                        st.warning("Senescence marker analysis could not be performed.")
+
+            elif selected_view == "LG":
+                with st.container():
+                    st.subheader("🌟 Longevity Gene Profiling")
+                    if longevity_results:
+                        st.metric("Overall Longevity Score", f"{longevity_results['longevity_score']:.0f} / 100", help="Score based on presence of known longevity-associated variants. Base score is 50.")
+                        
+                        if longevity_results['profile']:
+                            st.markdown("#### Favorable Longevity Variants Found")
+                            profile_df = pd.DataFrame(longevity_results['profile'])
+                            st.dataframe(profile_df)
+                            
+                            fig = px.pie(profile_df, values='contribution', names='variant_id',
+                                         title="Contribution of Variants to Longevity Score",
+                                         hover_data=['effect'])
+                            st.plotly_chart(fig, use_container_width=True, key=f'longevity_profile_{seq_idx}')
+                        else:
+                            st.info("No known favorable longevity-associated variants were detected in this sequence.")
+                    else:
+                        st.warning("Longevity gene profiling could not be performed.")
+
+            elif selected_view == "MI":
+                with st.container():
+                    st.subheader("⚡ Mitochondrial DNA (mtDNA) Integrity Analysis")
+                    if mtdna_results:
+                        col1, col2 = st.columns(2)
+                        col1.metric("mtDNA Integrity Score", f"{mtdna_results['integrity_score']:.1f} / 100", help="A higher score indicates fewer deletions and mutations.")
+                        col2.metric("Overall Assessment", mtdna_results['assessment'])
+                        
+                        if mtdna_results['deletions']:
+                            st.markdown("#### Detected mtDNA Deletions")
+                            deletions_df = pd.DataFrame(mtdna_results['deletions'])
+                            st.dataframe(deletions_df)
+                        else:
+                            st.success("No common mtDNA deletions were detected.")
+                        
+                        st.info(f"**Point Mutation Rate (Simulated):** {mtdna_results['point_mutation_rate']:.4%}. This rate contributes to the integrity score.")
+                    else:
+                        st.warning("mtDNA integrity analysis could not be performed.")
 
             # =================================================================
             # == Beta Features Section                                      ==
