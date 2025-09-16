@@ -977,8 +977,8 @@ def main():
                         st.write("• Non-coding sequence")
                 
                 # Generate AI insights
-               ''' st.subheader("🤖 AI-Generated Insights")
-                
+               # st.subheader("🤖 AI-Generated Insights")
+                '''
                 with st.spinner("🧠 Consulting Gemini for deep insights..."):
                     # Prepare summary for Gemini
                     top_species_name = "Unknown"
