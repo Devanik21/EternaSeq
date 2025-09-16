@@ -928,57 +928,106 @@ class DNAAnalyzer:
             'kmer_frequencies': {kmer: freq for kmer, freq in sorted(kmer_freq.items(), key=lambda item: item[1], reverse=True)}
         }
 
-    def analyze_biophysical_properties(self, sequence: str, window_size: int = 100, step: int = 10) -> Dict:
-        """Analyzes biophysical properties of the DNA sequence."""
-        if len(sequence) < window_size:
-            return {'error': 'Sequence too short for analysis'}
+    def analyze_repeats(self, sequence: str) -> Dict:
+        """Analyzes various types of repeats: microsatellites, inverted, and dispersed."""
+        all_repeats = []
 
-        # Bendability lookup (simplified, based on consensus)
-        bendability_map = {
-            'AA': 9.1, 'TT': 9.1, 'AT': 8.5, 'TA': 2.1,
-            'AC': 7.9, 'GT': 7.9, 'CA': 5.8, 'TG': 5.8,
-            'AG': 6.9, 'CT': 6.9, 'GA': 6.0, 'TC': 6.0,
-            'CC': 5.0, 'GG': 5.0, 'CG': 4.0, 'GC': 4.0
-        }
+        # 1. Microsatellites (Simple Sequence Repeats)
+        i = 0
+        while i < len(sequence):
+            found_repeat_at_i = False
+            # Check for motifs of length 6 down to 1 to prioritize longer motifs
+            for motif_len in range(6, 0, -1):
+                min_reps = max(3, 12 // motif_len) if motif_len > 0 else 3
+                
+                if i + motif_len * min_reps > len(sequence):
+                    continue
 
-        positions = []
-        tm_profile = []
-        gc_skew_profile = []
-        bendability_profile = []
+                motif = sequence[i:i+motif_len]
+                # Avoid simple homopolymer motifs like 'AAAAAA' being detected by motif_len=2 ('AA')
+                if len(set(motif)) == 1 and motif_len > 1:
+                    continue
 
-        for i in range(0, len(sequence) - window_size, step):
+                reps = 1
+                while sequence[i + reps*motif_len : i + (reps+1)*motif_len] == motif:
+                    reps += 1
+                
+                if reps >= min_reps:
+                    start = i
+                    end = i + reps * motif_len
+                    all_repeats.append({
+                        'class': 'Microsatellite',
+                        'type': f'{motif_len}-mer',
+                        'motif': motif,
+                        'start': start,
+                        'end': end,
+                        'length': end - start,
+                        'repetitions': reps
+                    })
+                    i = end # Advance i past the found repeat
+                    found_repeat_at_i = True
+                    break # Stop checking for shorter motifs at this position
+            
+            if not found_repeat_at_i:
+                i += 1
+
+        # 2. Inverted Repeats (potential for hairpins)
+        window_size = 150
+        min_len = 10
+        for i in range(len(sequence) - window_size):
+            # To avoid finding too many, we can step through the sequence
+            if i % 10 != 0: continue
+
             window = sequence[i:i+window_size]
-            positions.append(i + window_size // 2)
+            for l in range(min_len, window_size // 2):
+                sub = window[:l]
+                rev_comp_sub = self.reverse_complement(sub)
+                if rev_comp_sub in window[l:]:
+                    pos = window.find(rev_comp_sub, l)
+                    all_repeats.append({
+                        'class': 'Inverted Repeat',
+                        'type': 'Palindromic',
+                        'motif': f"{sub}...{rev_comp_sub}",
+                        'start': i,
+                        'end': i + pos + l,
+                        'length': pos + l,
+                        'repetitions': 2
+                    })
+                    break # Found one in this window, move on
 
-            # 1. Melting Temperature (Tm)
-            g_count = window.count('G')
-            c_count = window.count('C')
-            a_count = window.count('A')
-            t_count = window.count('T')
-            tm = 4 * (g_count + c_count) + 2 * (a_count + t_count)
-            tm_profile.append(tm)
+        # 3. Dispersed Repeats (SINE/LINE-like elements - simulated)
+        dispersed_db = {
+            'Alu-like (SINE)': 'CCTGTAGTCCCAGCTACT',
+            'L1-like (LINE)': 'AATTTGAAATTTGAAATTTG'
+        }
+        for name, motif in dispersed_db.items():
+            for match in re.finditer(motif, sequence):
+                all_repeats.append({
+                    'class': 'Dispersed Repeat',
+                    'type': name,
+                    'motif': motif,
+                    'start': match.start(),
+                    'end': match.end(),
+                    'length': len(motif),
+                    'repetitions': 1
+                })
 
-            # 2. GC Skew
-            if (g_count + c_count) > 0:
-                gc_skew = (g_count - c_count) / (g_count + c_count)
-            else:
-                gc_skew = 0
-            gc_skew_profile.append(gc_skew)
-
-            # 3. Bendability
-            bend_score = 0
-            for j in range(window_size - 1):
-                dinuc = window[j:j+2]
-                bend_score += bendability_map.get(dinuc, 5.0) # Use average for unknown
-            bendability_profile.append(bend_score / window_size)
+        # Remove overlapping repeats, keeping the longest one
+        unique_repeats = []
+        if all_repeats:
+            all_repeats.sort(key=lambda x: x['length'], reverse=True)
+            covered_indices = set()
+            for repeat in all_repeats:
+                indices = set(range(repeat['start'], repeat['end']))
+                if not indices.intersection(covered_indices):
+                    unique_repeats.append(repeat)
+                    covered_indices.update(indices)
 
         return {
-            'positions': positions,
-            'tm_profile': tm_profile,
-            'gc_skew_profile': gc_skew_profile,
-            'bendability_profile': bendability_profile,
-            'avg_tm': np.mean(tm_profile) if tm_profile else 0,
-            'avg_bendability': np.mean(bendability_profile) if bendability_profile else 0
+            'total_repeats_found': len(unique_repeats),
+            'repeat_summary': dict(Counter(r['class'] for r in unique_repeats)),
+            'repeat_density': (sum(r['length'] for r in unique_repeats) / len(sequence)) * 100 if sequence else 0,
+            'repeats': sorted(unique_repeats, key=lambda x: x['start'])
         }
 
     def predict_tfbs(self, sequence: str) -> Dict:
@@ -1257,7 +1306,8 @@ def main():
         - **KA**: 📊 K-mer Analysis
         - **RA**: 🔁 Repeat Analysis
         - **BS**: 🔗 Binding Sites
-        - **CU**: 🧬 Codon Usage
+        - **CU**: 🧬 Codon Usage,
+        "BP": "🌡️ Biophysical Profile"
         """)
 
 
@@ -1389,6 +1439,7 @@ def main():
                 repeat_results = analyzer.analyze_repeats(sequence)
                 tfbs_results = analyzer.predict_tfbs(sequence)
                 codon_usage_results = analyzer.analyze_codon_usage(orfs)
+                biophysical_results = analyzer.analyze_biophysical_properties(sequence)
 
                 # Metrics for advanced tab
                 entropy = -sum(p * np.log2(p) for p in [sequence.count(n)/len(sequence) for n in 'ATCG'] if p > 0)
@@ -1437,8 +1488,8 @@ def main():
             # NEW: Analysis view selector
             analysis_options = [
                 "SQ", "GN", "PR", "SP", 
-                "TG", "AD", "CR", "KA",
-                "RA", "BS", "CU"
+                "TG", "AD", "CR", "KA", 
+                "BS", "CU", "BP"
             ]
 
             # Initialize session state for the active analysis view for each sequence
@@ -1597,36 +1648,6 @@ def main():
                     else:
                         st.info(f"Sequence is too short to calculate {k}-mers.")
 
-            elif selected_view == "RA":
-                with st.container():
-                    st.subheader("🔁 Comprehensive Repeat Analysis")
-                    if repeat_results and repeat_results['total_repeats_found'] > 0:
-                        col1, col2 = st.columns(2)
-                        col1.metric("Total Repeat Regions Found", repeat_results['total_repeats_found'])
-                        col2.metric("Repeat Density", f"{repeat_results['repeat_density']:.2f}%", help="Percentage of the sequence covered by repeat elements.")
-                        
-                        # Summary chart
-                        summary_df = pd.DataFrame(list(repeat_results['repeat_summary'].items()), columns=['Repeat Class', 'Count'])
-                        fig_summary = px.pie(summary_df, values='Count', names='Repeat Class',
-                                             title="Summary of Repeat Classes Found",
-                                             color_discrete_sequence=px.colors.sequential.Plasma_r)
-                        st.plotly_chart(fig_summary, use_container_width=True, key=f'repeat_summary_{seq_idx}')
-                        
-                        # Detailed table
-                        repeats_df = pd.DataFrame(repeat_results['repeats'])
-                        st.markdown("#### Detailed Repeat Information")
-                        st.dataframe(repeats_df[['class', 'type', 'start', 'end', 'length', 'motif', 'repetitions']])
-                        
-                        # Distribution plot
-                        fig_dist = px.scatter(repeats_df, x='start', y='length', color='class', size='length',
-                                               title="Distribution of All Repeat Types",
-                                               labels={'start': 'Start Position', 'length': 'Repeat Length (bp)'},
-                                               hover_data=['type', 'motif', 'repetitions'])
-                        fig_dist.update_layout(xaxis_range=[0, len(sequence)])
-                        st.plotly_chart(fig_dist, use_container_width=True, key=f'repeat_analysis_{seq_idx}')
-                    else:
-                        st.success("No significant repeat elements found in the sequence.")
-
             elif selected_view == "BS":
                 with st.container():
                     st.subheader("🔗 Transcription Factor Binding Site (TFBS) Prediction")
@@ -1664,6 +1685,44 @@ def main():
                             st.dataframe(usage_df.sort_values(by=['amino_acid', 'count'], ascending=[True, False]))
                     else:
                         st.info("No ORFs found, so codon usage cannot be calculated.")
+            
+            elif selected_view == "BP":
+                with st.container():
+                    st.subheader("🌡️ DNA Biophysical Profile")
+                    if biophysical_results and 'error' not in biophysical_results:
+                        col1, col2 = st.columns(2)
+                        col1.metric("Average Melting Temp (Tm)", f"{biophysical_results['avg_tm']:.1f} °C")
+                        col2.metric("Average Bendability", f"{biophysical_results['avg_bendability']:.2f}")
+
+                        st.info("This analysis shows predicted physical properties along the DNA strand, which can indicate regions of instability, replication origins, or structural features.")
+
+                        fig = make_subplots(rows=3, cols=1, shared_xaxes=True,
+                                            subplot_titles=("Melting Temperature (Tm) Profile",
+                                                            "GC Skew ((G-C)/(G+C)) Profile",
+                                                            "DNA Bendability Profile"))
+
+                        fig.add_trace(go.Scatter(x=biophysical_results['positions'], y=biophysical_results['tm_profile'],
+                                                 mode='lines', name='Tm (°C)', line=dict(color='red')),
+                                      row=1, col=1)
+
+                        fig.add_trace(go.Scatter(x=biophysical_results['positions'], y=biophysical_results['gc_skew_profile'],
+                                                 mode='lines', name='GC Skew', line=dict(color='blue')),
+                                      row=2, col=1)
+                        fig.add_hline(y=0, line_dash="dash", row=2, col=1, line_color='gray')
+
+                        fig.add_trace(go.Scatter(x=biophysical_results['positions'], y=biophysical_results['bendability_profile'],
+                                                 mode='lines', name='Bendability', line=dict(color='green')),
+                                      row=3, col=1)
+
+                        fig.update_layout(height=600, title_text="Biophysical Properties Along Sequence", showlegend=False)
+                        fig.update_xaxes(title_text="Nucleotide Position", row=3, col=1)
+                        fig.update_yaxes(title_text="Tm (°C)", row=1, col=1)
+                        fig.update_yaxes(title_text="GC Skew", row=2, col=1)
+                        fig.update_yaxes(title_text="Bendability", row=3, col=1)
+
+                        st.plotly_chart(fig, use_container_width=True, key=f'biophysical_profile_{seq_idx}')
+                    else:
+                        st.warning("Sequence is too short for biophysical profile analysis.")
 
             # =================================================================
             # == Beta Features Section                                      ==
