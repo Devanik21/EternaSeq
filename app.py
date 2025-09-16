@@ -1301,8 +1301,16 @@ def main():
             col1, col2, _ = st.columns([1, 1, 2])
             with col1:
                 start_seq = st.number_input("Start Sequence", min_value=1, max_value=total_sequences, value=1, step=1, key="start_seq_range")
+            
+            # Before rendering the end_seq input, check if its state is valid against the new start_seq.
+            # This prevents a StreamlitValueBelowMinError if the user increases the start past the current end.
+            if "end_seq_range" in st.session_state and st.session_state.end_seq_range < start_seq:
+                st.warning(f"⚠️ 'End Sequence' ({st.session_state.end_seq_range}) cannot be less than the new 'Start Sequence' ({start_seq}). Adjusting to match.")
+                st.session_state.end_seq_range = start_seq
+
             with col2:
-                end_seq = st.number_input("End Sequence", min_value=start_seq, max_value=total_sequences, value=min(10, total_sequences), step=1, key="end_seq_range")
+                # The value parameter here is just a default for the first run.
+                end_seq = st.number_input("End Sequence", min_value=start_seq, max_value=total_sequences, value=min(start_seq + 9, total_sequences), step=1, key="end_seq_range")
             
             # Adjust for 0-based indexing for slicing
             start_index = start_seq - 1
