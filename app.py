@@ -18,7 +18,7 @@ import streamlit.components.v1 as components
 
 # Configure page
 st.set_page_config(
-    page_title="EternaSeq - Revolutionary DNA Analyzer",
+    page_title="🧬 EternaSeq - Revolutionary DNA Analyzer",
     page_icon="🧬",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -552,6 +552,98 @@ class DNAAnalyzer:
             'overall_methylation_potential': 'High' if len(cpg_islands) > 2 else 'Moderate' if len(cpg_islands) > 0 else 'Low'
         }
 
+    def predict_non_coding_rna(self, sequence: str) -> Dict:
+        """Predicts non-coding RNAs (ncRNAs) like miRNA and lncRNA."""
+        mirnas = []
+        lncrnas = []
+        
+        # 1. miRNA prediction (simplified: look for hairpin potential)
+        # Look for short inverted repeats which could form hairpins.
+        window_size = 60
+        min_hairpin_len = 15
+        if len(sequence) > window_size:
+            for i in range(len(sequence) - window_size):
+                window = sequence[i:i+window_size]
+                # Find a short inverted repeat within the window
+                for l in range(min_hairpin_len, window_size // 2):
+                    sub = window[:l]
+                    rev_comp_sub = self.reverse_complement(sub)
+                    if rev_comp_sub in window[l:]:
+                        mirnas.append({
+                            'start': i,
+                            'end': i + window_size,
+                            'potential_hairpin_seq': window,
+                            'confidence': 70 + len(sub) # Simple confidence score
+                        })
+                        break # Move to next window
+        
+        # 2. lncRNA prediction (simplified: long regions with no long ORFs)
+        orfs = self.find_orfs(sequence)
+        # Create a map of where ORFs are
+        orf_map = [0] * len(sequence)
+        for orf in orfs:
+            if orf['length'] > 150: # A somewhat significant ORF
+                for i in range(orf['start'] - 1, orf['end']):
+                    if i < len(orf_map):
+                        orf_map[i] = 1
+        
+        # Find long stretches of non-coding regions
+        in_lncrna = False
+        lnc_start = 0
+        for i in range(len(orf_map)):
+            if orf_map[i] == 0 and not in_lncrna:
+                in_lncrna = True
+                lnc_start = i
+            elif orf_map[i] == 1 and in_lncrna:
+                in_lncrna = False
+                length = i - lnc_start
+                if length > 200: # lncRNA minimum length
+                    lncrnas.append({
+                        'start': lnc_start,
+                        'end': i,
+                        'length': length,
+                        'gc_content': (sequence[lnc_start:i].count('G') + sequence[lnc_start:i].count('C')) / length * 100 if length > 0 else 0
+                    })
+        if in_lncrna:
+            length = len(sequence) - lnc_start
+            if length > 200:
+                lncrnas.append({
+                    'start': lnc_start,
+                    'end': len(sequence),
+                    'length': length,
+                    'gc_content': (sequence[lnc_start:].count('G') + sequence[lnc_start:].count('C')) / length * 100 if length > 0 else 0
+                })
+
+        return {
+            'mirnas_found': len(mirnas),
+            'mirnas': sorted(mirnas, key=lambda x: x['confidence'], reverse=True)[:5],
+            'lncrnas_found': len(lncrnas),
+            'lncrnas': sorted(lncrnas, key=lambda x: x['length'], reverse=True)[:5]
+        }
+
+    def detect_viral_integration(self, sequence: str) -> Dict:
+        """Detects potential viral integration sites."""
+        viral_signatures = {
+            'HPV16': 'ACCGACAGCTCAGAGGAGGAG', # Human Papillomavirus 16
+            'HBV': 'AATTCCACCAAGCCTCCAA',     # Hepatitis B Virus
+            'HIV-1': 'GGTCTCTCTGGTTAGACCAGA', # Human Immunodeficiency Virus 1
+            'EBV': 'AGGAACCAAGTCGATCTTCC',    # Epstein-Barr Virus
+        }
+        integrations = []
+        for virus, signature in viral_signatures.items():
+            for match in re.finditer(signature, sequence):
+                integrations.append({
+                    'virus': virus,
+                    'start': match.start(),
+                    'end': match.end(),
+                    'signature_sequence': signature,
+                    'confidence': 95.0 # High confidence if exact signature is found
+                })
+        return {
+            'integrations_found': len(integrations),
+            'integrations': sorted(integrations, key=lambda x: x['confidence'], reverse=True)
+        }
+
     def generate_pdb_from_structure(self, protein_sequence: str, structure_sequence: str) -> str:
         """Generates a simulated PDB file string from a protein and its secondary structure."""
         pdb_lines = []
@@ -754,9 +846,15 @@ def main():
                 
                 # Run beta analysis if selected
                 epigenetic_results = None
-                if st.session_state.get('selected_beta_feature', "Select a Beta Feature...").startswith("1."):
+                ncrna_results = None
+                viral_results = None
+                selected_feature = st.session_state.get('selected_beta_feature', "Select a Beta Feature...")
+                if selected_feature.startswith("1."):
                     epigenetic_results = analyzer.epigenetic_analysis(sequence)
-
+                elif selected_feature.startswith("2."):
+                    ncrna_results = analyzer.predict_non_coding_rna(sequence)
+                elif selected_feature.startswith("3."):
+                    viral_results = analyzer.detect_viral_integration(sequence)
                 # Metrics for advanced tab
                 entropy = -sum(p * np.log2(p) for p in [sequence.count(n)/len(sequence) for n in 'ATCG'] if p > 0)
                 words_3 = [sequence[i:i+3] for i in range(len(sequence)-2)]
@@ -1067,11 +1165,11 @@ def main():
             # =================================================================
             # == Beta Features Section                                      ==
             # =================================================================
-            if st.session_state.get('selected_beta_feature') and st.session_state.selected_beta_feature != "Select a Beta Feature...":
+            if selected_feature and selected_feature != "Select a Beta Feature...":
                 st.markdown("---")
                 st.header(f"🔬 Beta Feature Analysis: {st.session_state.selected_beta_feature.split('.', 1)[1].strip()}")
 
-                if st.session_state.selected_beta_feature.startswith("1."):
+                if selected_feature.startswith("1."):
                     # Epigenetic Analysis (Implemented)
                     if epigenetic_results:
                         st.subheader("🧬 Epigenetic Landscape")
@@ -1103,6 +1201,67 @@ def main():
                                 st.info("No G-Quadruplex motifs found.")
                     else:
                         st.warning("Epigenetic analysis could not be performed.")
+                
+                elif selected_feature.startswith("2."):
+                    # Non-coding RNA Prediction
+                    if ncrna_results:
+                        st.subheader("🧬 Non-coding RNA (ncRNA) Prediction")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.metric("Potential miRNAs found", ncrna_results['mirnas_found'])
+                            if ncrna_results['mirnas']:
+                                st.markdown("**Top miRNA Candidates:**")
+                                mirna_df = pd.DataFrame(ncrna_results['mirnas'])
+                                st.dataframe(mirna_df[['start', 'end', 'confidence']].head().style.format({'confidence': '{:.0f}%'}))
+                                
+                                fig_mirna = px.scatter(mirna_df, x='start', y='confidence',
+                                                       title="miRNA Candidates by Location and Confidence",
+                                                       hover_data=['start', 'end'],
+                                                       labels={'start': 'Start Position', 'confidence': 'Confidence Score'})
+                                st.plotly_chart(fig_mirna, use_container_width=True, key=f'mirna_dist_{seq_idx}')
+                            else:
+                                st.info("No strong miRNA candidates detected.")
+                        
+                        with col2:
+                            st.metric("Potential lncRNAs found", ncrna_results['lncrnas_found'])
+                            if ncrna_results['lncrnas']:
+                                st.markdown("**Top lncRNA Candidates:**")
+                                lncrna_df = pd.DataFrame(ncrna_results['lncrnas'])
+                                st.dataframe(lncrna_df[['start', 'end', 'length', 'gc_content']].head().style.format({'gc_content': '{:.1f}%'}))
+
+                                fig_lncrna = px.scatter(lncrna_df, x='start', y='length', size='gc_content',
+                                                        title="lncRNA Candidates by Location and Length",
+                                                        hover_data=['start', 'end', 'gc_content'],
+                                                        labels={'start': 'Start Position', 'length': 'Length (bp)'})
+                                st.plotly_chart(fig_lncrna, use_container_width=True, key=f'lncrna_dist_{seq_idx}')
+                            else:
+                                st.info("No strong lncRNA candidates detected.")
+                    else:
+                        st.warning("ncRNA analysis could not be performed.")
+
+                elif selected_feature.startswith("3."):
+                    # Viral Integration Site Detection
+                    if viral_results:
+                        st.subheader("🦠 Viral Integration Site Detection")
+                        st.metric("Potential Integration Events", viral_results['integrations_found'])
+                        
+                        if viral_results['integrations']:
+                            st.markdown("**Detected Signatures:**")
+                            viral_df = pd.DataFrame(viral_results['integrations'])
+                            st.dataframe(viral_df.style.format({'confidence': '{:.1f}%'}))
+
+                            # Add a chart
+                            fig_viral = px.scatter(viral_df, x='start', y='confidence',
+                                                   color='virus',
+                                                   title="Potential Viral Integration Sites",
+                                                   hover_data=['virus', 'start', 'end', 'signature_sequence'],
+                                                   labels={'start': 'Position on Sequence', 'confidence': 'Confidence (%)'})
+                            fig_viral.update_layout(xaxis_range=[0, len(sequence)])
+                            st.plotly_chart(fig_viral, use_container_width=True, key=f'viral_integration_{seq_idx}')
+                        else:
+                            st.success("No known viral signatures or retrovirus-like elements detected.")
+                    else:
+                        st.warning("Viral integration analysis could not be performed.")
                 
                 else:
                     # Preview for other features
