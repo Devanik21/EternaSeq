@@ -1482,7 +1482,7 @@ def main():
                         st.write("• Non-coding sequence")
                 
                 # Generate AI insights
-               # st.subheader("🤖 AI-Generated Insights")
+               # st.subheader("✨ AI-Generated Insights")
                 
 
 
@@ -1829,7 +1829,7 @@ def main():
             st.header(f"🔬 Beta Feature Analysis: {selected_feature.split('.', 1)[1].strip()}")
             st.info("This feature provides a high-level summary and drug discovery hypotheses based on an analysis of **all** uploaded sequences.")
 
-            if st.button("🤖 Generate AI-Powered Insights", key="generate_ai_insights"):
+            if st.button("✨ Generate AI-Powered Insights", key="generate_ai_insights"):
                 api_key = st.session_state.get("google_api_key")
                 if not all_analyses_summary:
                     st.warning("No sequences were analyzed. Please upload data first.")
