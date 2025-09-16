@@ -603,7 +603,7 @@ def get_gemini_insights(api_key: str, analysis_summary: Dict) -> List[str]:
     
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        model = genai.GenerativeModel('gemini-2.5-flash-lite')
         
         # Create a detailed prompt
         prompt = f"""
