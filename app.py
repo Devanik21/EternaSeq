@@ -929,39 +929,105 @@ class DNAAnalyzer:
         }
 
     def analyze_repeats(self, sequence: str) -> Dict:
-        """Analyzes simple sequence repeats (microsatellites)."""
-        repeats = []
-        # Di-nucleotide repeats (at least 5 repeats)
-        for n1 in 'ATCG':
-            for n2 in 'ATCG':
-                motif = n1 + n2
-                if motif == self.reverse_complement(motif): continue # Avoid redundant e.g. AT vs TA
-                for match in re.finditer(f'({motif}){{5,}}', sequence):
-                    repeats.append({
-                        'type': 'Di-nucleotide',
+        """Analyzes various types of repeats: microsatellites, inverted, and dispersed."""
+        all_repeats = []
+
+        # 1. Microsatellites (Simple Sequence Repeats)
+        i = 0
+        while i < len(sequence):
+            found_repeat_at_i = False
+            # Check for motifs of length 6 down to 1 to prioritize longer motifs
+            for motif_len in range(6, 0, -1):
+                min_reps = max(3, 12 // motif_len) if motif_len > 0 else 3
+                
+                if i + motif_len * min_reps > len(sequence):
+                    continue
+
+                motif = sequence[i:i+motif_len]
+                # Avoid simple homopolymer motifs like 'AAAAAA' being detected by motif_len=2 ('AA')
+                if len(set(motif)) == 1 and motif_len > 1:
+                    continue
+
+                reps = 1
+                while sequence[i + reps*motif_len : i + (reps+1)*motif_len] == motif:
+                    reps += 1
+                
+                if reps >= min_reps:
+                    start = i
+                    end = i + reps * motif_len
+                    all_repeats.append({
+                        'class': 'Microsatellite',
+                        'type': f'{motif_len}-mer',
                         'motif': motif,
-                        'start': match.start(),
-                        'end': match.end(),
-                        'length': match.end() - match.start(),
-                        'repetitions': (match.end() - match.start()) // 2
+                        'start': start,
+                        'end': end,
+                        'length': end - start,
+                        'repetitions': reps
                     })
-        # Tri-nucleotide repeats (at least 4 repeats)
-        for n1 in 'ATCG':
-            for n2 in 'ATCG':
-                for n3 in 'ATCG':
-                    motif = n1 + n2 + n3
-                    for match in re.finditer(f'({motif}){{4,}}', sequence):
-                        repeats.append({
-                            'type': 'Tri-nucleotide',
-                            'motif': motif,
-                            'start': match.start(),
-                            'end': match.end(),
-                            'length': match.end() - match.start(),
-                            'repetitions': (match.end() - match.start()) // 3
-                        })
+                    i = end # Advance i past the found repeat
+                    found_repeat_at_i = True
+                    break # Stop checking for shorter motifs at this position
+            
+            if not found_repeat_at_i:
+                i += 1
+
+        # 2. Inverted Repeats (potential for hairpins)
+        window_size = 150
+        min_len = 10
+        for i in range(len(sequence) - window_size):
+            # To avoid finding too many, we can step through the sequence
+            if i % 10 != 0: continue
+
+            window = sequence[i:i+window_size]
+            for l in range(min_len, window_size // 2):
+                sub = window[:l]
+                rev_comp_sub = self.reverse_complement(sub)
+                if rev_comp_sub in window[l:]:
+                    pos = window.find(rev_comp_sub, l)
+                    all_repeats.append({
+                        'class': 'Inverted Repeat',
+                        'type': 'Palindromic',
+                        'motif': f"{sub}...{rev_comp_sub}",
+                        'start': i,
+                        'end': i + pos + l,
+                        'length': pos + l,
+                        'repetitions': 2
+                    })
+                    break # Found one in this window, move on
+
+        # 3. Dispersed Repeats (SINE/LINE-like elements - simulated)
+        dispersed_db = {
+            'Alu-like (SINE)': 'CCTGTAGTCCCAGCTACT',
+            'L1-like (LINE)': 'AATTTGAAATTTGAAATTTG'
+        }
+        for name, motif in dispersed_db.items():
+            for match in re.finditer(motif, sequence):
+                all_repeats.append({
+                    'class': 'Dispersed Repeat',
+                    'type': name,
+                    'motif': motif,
+                    'start': match.start(),
+                    'end': match.end(),
+                    'length': len(motif),
+                    'repetitions': 1
+                })
+
+        # Remove overlapping repeats, keeping the longest one
+        unique_repeats = []
+        if all_repeats:
+            all_repeats.sort(key=lambda x: x['length'], reverse=True)
+            covered_indices = set()
+            for repeat in all_repeats:
+                indices = set(range(repeat['start'], repeat['end']))
+                if not indices.intersection(covered_indices):
+                    unique_repeats.append(repeat)
+                    covered_indices.update(indices)
+
         return {
-            'repeats_found': len(repeats),
-            'repeats': sorted(repeats, key=lambda x: x['length'], reverse=True)
+            'total_repeats_found': len(unique_repeats),
+            'repeat_summary': dict(Counter(r['class'] for r in unique_repeats)),
+            'repeat_density': (sum(r['length'] for r in unique_repeats) / len(sequence)) * 100 if sequence else 0,
+            'repeats': sorted(unique_repeats, key=lambda x: x['start'])
         }
 
     def predict_tfbs(self, sequence: str) -> Dict:
@@ -1582,21 +1648,33 @@ def main():
 
             elif selected_view == "RA":
                 with st.container():
-                    st.subheader("🔁 Simple Repeat Analysis")
-                    if repeat_results and repeat_results['repeats_found'] > 0:
-                        st.metric("Total Repeat Regions Found", repeat_results['repeats_found'])
+                    st.subheader("🔁 Comprehensive Repeat Analysis")
+                    if repeat_results and repeat_results['total_repeats_found'] > 0:
+                        col1, col2 = st.columns(2)
+                        col1.metric("Total Repeat Regions Found", repeat_results['total_repeats_found'])
+                        col2.metric("Repeat Density", f"{repeat_results['repeat_density']:.2f}%", help="Percentage of the sequence covered by repeat elements.")
                         
+                        # Summary chart
+                        summary_df = pd.DataFrame(list(repeat_results['repeat_summary'].items()), columns=['Repeat Class', 'Count'])
+                        fig_summary = px.pie(summary_df, values='Count', names='Repeat Class',
+                                             title="Summary of Repeat Classes Found",
+                                             color_discrete_sequence=px.colors.sequential.Plasma_r)
+                        st.plotly_chart(fig_summary, use_container_width=True, key=f'repeat_summary_{seq_idx}')
+                        
+                        # Detailed table
                         repeats_df = pd.DataFrame(repeat_results['repeats'])
-                        st.dataframe(repeats_df)
+                        st.markdown("#### Detailed Repeat Information")
+                        st.dataframe(repeats_df[['class', 'type', 'start', 'end', 'length', 'motif', 'repetitions']])
                         
-                        fig = px.scatter(repeats_df, x='start', y='length', color='type', size='repetitions',
-                                       title="Distribution of Simple Sequence Repeats (SSRs)",
-                                       labels={'start': 'Start Position', 'length': 'Total Length (bp)'},
-                                       hover_data=['motif', 'repetitions'])
-                        fig.update_layout(xaxis_range=[0, len(sequence)])
-                        st.plotly_chart(fig, use_container_width=True, key=f'repeat_analysis_{seq_idx}')
+                        # Distribution plot
+                        fig_dist = px.scatter(repeats_df, x='start', y='length', color='class', size='length',
+                                               title="Distribution of All Repeat Types",
+                                               labels={'start': 'Start Position', 'length': 'Repeat Length (bp)'},
+                                               hover_data=['type', 'motif', 'repetitions'])
+                        fig_dist.update_layout(xaxis_range=[0, len(sequence)])
+                        st.plotly_chart(fig_dist, use_container_width=True, key=f'repeat_analysis_{seq_idx}')
                     else:
-                        st.success("No significant simple sequence repeats found.")
+                        st.success("No significant repeat elements found in the sequence.")
 
             elif selected_view == "BS":
                 with st.container():
