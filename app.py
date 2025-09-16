@@ -1107,6 +1107,17 @@ def main():
             type="password",
             help="Required for AI-Powered Drug Discovery feature."
         )
+        st.divider()
+        st.subheader("📘 Analysis Codes")
+        st.markdown("""
+        - **SQ**: 🧬 Sequence Analysis
+        - **GN**: 🔍 Gene Identification
+        - **PR**: 🧪 Protein Prediction
+        - **SP**: 🌿 Species Classification
+        - **TG**: ⚗️ Drug Targets
+        - **AD**: 🔬 Advanced Analysis
+        - **CR**: ✂️ CRISPR Gene Editing
+        """)
 
 
     # File upload section
@@ -1250,8 +1261,8 @@ def main():
 
             # NEW: Analysis view selector
             analysis_options = [
-                "🧬 Sequence", "🔍 Genes", "🧪 Protein", "🌿 Species", 
-                "⚗️ Targets", "🔬 Advanced", "✂️ CRISPR"
+                "SQ", "GN", "PR", "SP", 
+                "TG", "AD", "CR"
             ]
 
             # Initialize session state for the active analysis view for each sequence
@@ -1272,7 +1283,7 @@ def main():
             selected_view = st.session_state.active_analysis[seq_idx]
 
             # Render the selected analysis view on-demand
-            if selected_view == "🧬 Sequence":
+            if selected_view == "SQ":
                 with st.container():
                     st.subheader("📊 Nucleotide Composition Analysis")
                     comp_df = pd.DataFrame(list(composition['composition'].items()), columns=['Nucleotide', 'Count'])
@@ -1282,7 +1293,7 @@ def main():
                     formatted_seq = create_sequence_visualization(sequence)
                     st.markdown(f'<div class="dna-sequence">{formatted_seq}</div>', unsafe_allow_html=True)
 
-            elif selected_view == "🔍 Genes":
+            elif selected_view == "GN":
                 with st.container():
                     st.subheader("🎯 Gene Identification & ORF Analysis")
                     if orfs:
@@ -1296,7 +1307,7 @@ def main():
                         for gene in genes_found:
                             st.markdown(f"""<div class="analysis-card"><h4>{gene['name']} ({gene['gene_id']})</h4><p><strong>Function:</strong> {gene['function']}</p><p><strong>Confidence:</strong> {gene['confidence']:.0f}%</p></div>""", unsafe_allow_html=True)
 
-            elif selected_view == "🧪 Protein":
+            elif selected_view == "PR":
                 with st.container():
                     st.subheader("🧪 Protein Structure Prediction")
                     if orfs:
@@ -1328,7 +1339,7 @@ def main():
                     else:
                         st.info("No Open Reading Frames found to predict protein structures.")
 
-            elif selected_view == "🌿 Species":
+            elif selected_view == "SP":
                 with st.container():
                     st.subheader("🌿 Species Classification & Phylogenetics")
                     if species_scores:
@@ -1343,7 +1354,7 @@ def main():
                     with col2:
                         st.metric("Evolutionary Rate", evo_analysis['evolutionary_rate'])
 
-            elif selected_view == "⚗️ Targets":
+            elif selected_view == "TG":
                 with st.container():
                     st.subheader("⚗️ Pharmacogenomics & Drug Targets")
                     if pharma_analysis['drug_targets']:
@@ -1353,7 +1364,7 @@ def main():
                     else:
                         st.info("No significant pharmacogenomic markers detected in this sequence.")
 
-            elif selected_view == "🔬 Advanced":
+            elif selected_view == "AD":
                 with st.container():
                     st.subheader("🔬 Advanced Genomic Intelligence")
                     col1, col2 = st.columns(2)
@@ -1373,7 +1384,7 @@ def main():
                         else:
                             st.write("• Non-coding sequence")
 
-            elif selected_view == "✂️ CRISPR":
+            elif selected_view == "CR":
                 with st.container():
                     st.subheader("✂️ CRISPR/Cas9 Guide RNA Design")
                     if crispr_guides:
