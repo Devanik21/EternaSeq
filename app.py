@@ -768,6 +768,140 @@ class DNAAnalyzer:
             'homology_hits': sorted(homology_results, key=lambda x: x['identity'], reverse=True)
         }
 
+    def predict_3d_folding(self, sequence: str) -> Dict:
+        """Predicts 3D genome folding patterns like TADs and loops (simulated)."""
+        # Simplified insulator motifs (like CTCF binding sites)
+        insulator_motifs = ['CCCTCCTCCCC', 'GCGCGGGGGC']
+        promoter_like = 'TATAAT'
+        enhancer_like = 'TGTGTC'
+        
+        tads = []
+        loops = []
+        
+        # 1. Find TAD boundaries
+        boundaries = [0]
+        for motif in insulator_motifs:
+            for match in re.finditer(motif, sequence):
+                boundaries.append(match.start())
+        boundaries.append(len(sequence))
+        boundaries = sorted(list(set(boundaries)))
+        
+        for i in range(len(boundaries) - 1):
+            start, end = boundaries[i], boundaries[i+1]
+            if end - start > 1000: # Minimum TAD size
+                tads.append({
+                    'start': start,
+                    'end': end,
+                    'length': end - start,
+                    'type': 'Predicted TAD'
+                })
+
+        # 2. Find loops within TADs
+        promoters = [m.start() for m in re.finditer(promoter_like, sequence)]
+        enhancers = [m.start() for m in re.finditer(enhancer_like, sequence)]
+        
+        for tad in tads:
+            tad_promoters = [p for p in promoters if tad['start'] <= p < tad['end']]
+            tad_enhancers = [e for e in enhancers if tad['start'] <= e < tad['end']]
+            
+            # Connect each promoter to the nearest enhancer in the same TAD
+            for p_pos in tad_promoters:
+                closest_e = -1
+                min_dist = float('inf')
+                for e_pos in tad_enhancers:
+                    dist = abs(p_pos - e_pos)
+                    if dist < min_dist and dist > 100: # Must be a long-range interaction
+                        min_dist = dist
+                        closest_e = e_pos
+                
+                if closest_e != -1:
+                    loops.append({
+                        'promoter_pos': p_pos,
+                        'enhancer_pos': closest_e,
+                        'distance': min_dist,
+                        'tad_start': tad['start'],
+                        'tad_end': tad['end'],
+                        'strength': np.random.uniform(0.5, 1.0) # Simulated interaction strength
+                    })
+
+        return {
+            'tads_found': len(tads),
+            'tads': sorted(tads, key=lambda x: x['length'], reverse=True),
+            'loops_found': len(loops),
+            'loops': sorted(loops, key=lambda x: x['strength'], reverse=True)
+        }
+
+    def infer_regulatory_network(self, sequence: str, orfs: List[Dict]) -> Dict:
+        """Infers a gene regulatory network from TFBS and gene locations (simulated)."""
+        # Simplified Transcription Factor Binding Site (TFBS) motifs
+        tfbs_db = {
+            'SP1': 'GGGCGG',
+            'AP-1': 'TGACTCA',
+            'NF-kB': 'GGGACTTTCC',
+            'CREB': 'TGACGTCA',
+            'MYC': 'CACGTG'
+        }
+        
+        regulations = []
+        
+        # Find ORFs to act as target genes
+        target_genes = [{'id': f"ORF_{i+1}", 'start': orf['start']} for i, orf in enumerate(orfs)]
+        
+        if not target_genes:
+            return {'regulations': []}
+            
+        for tf, motif in tfbs_db.items():
+            for match in re.finditer(motif, sequence):
+                tfbs_pos = match.start()
+                
+                # Find the closest downstream gene
+                closest_gene = None
+                min_dist = float('inf')
+                
+                for gene in target_genes:
+                    dist = gene['start'] - tfbs_pos
+                    if 0 < dist < 5000: # Look in a 5kb upstream window
+                        if dist < min_dist:
+                            min_dist = dist
+                            closest_gene = gene['id']
+                
+                if closest_gene:
+                    regulations.append({
+                        'tf': tf,
+                        'target_gene': closest_gene,
+                        'tfbs_location': tfbs_pos,
+                        'distance_to_gene': min_dist,
+                        'regulation_type': 'Activation' if np.random.rand() > 0.3 else 'Repression' # Simulated
+                    })
+                    
+        return {'regulations': regulations}
+
+    def design_synthetic_circuits(self, sequence: str, orfs: List[Dict]) -> Dict:
+        """Proposes synthetic biology circuits based on the sequence (simulated)."""
+        # Library of synthetic biology parts
+        parts_db = {
+            'promoters': [{'id': 'pTet', 'sequence': 'TCCCTATCAGTGATAGAGATTGACATCCCTATCAGTGATAGAGATACTGAGCAC', 'strength': 95}],
+            'rbs': [{'id': 'RBS_strong', 'sequence': 'AGGAGG', 'strength': 90}],
+            'terminators': [{'id': 'Term_double', 'sequence': 'CCAGGGCATCAAATAAAACGAAAGGCTCAGTCGAAAGACTGGGCCTTTCGTTTTATCTGTTGTTTGTCGGTGAACGCTCT', 'efficiency': 98}],
+            'reporters': [{'id': 'GFP', 'sequence': 'ATGAGTAAAGGAGAAGAACTTTTCACTGGAGTTGTCCCAATTCTTGTTGAATTAGATGGTGATGTTAATGGGCACAAATTTTCTGTCAGTGGAGAGGGTGAAGGTGATGCAACATACGGAAAACTTACCCTTAAATTTATTTGCACTACTGGAAAACTACCTGTTCCATGGCCAACACTTGTCACTACTTTCTCTTATGGTGTTCAATGCTTTTCCCGTTATCCGGATCATATGAAACGGCATGACTTTTTCAAGAGTGCCATGCCCGAAGGTTATGTACAGGAACGCACTATATCTTTCAAAGATGACGGGAACTACAAGACGCGTGCTGAAGTCAAGTTTGAAGGTGATACCCTTGTTAATCGTATCGAGTTAAAAGGTATTGATTTTAAAGAAGATGGAAACATTCTTGGACACAAATTGGAATACAACTATAACTCACACAATGTATACATCATGGCAGACAAACAAAAGAATGGAATCAAAGTTAACTTCAAAATTCGCCACAACATTGAAGATGGATCCGTTCAACTAGCAGACCATTATCAACAAAATACTCCAATTGGCGATGGCCCTGTCCTTTTACCAGACAACCATTACCTGTCGACACAATCTGCCCTTTCGAAAGATCCCAACGAAAAGCGTGACCACATGGTCCTTCTTGAGTTTGTAACTGCTGCTGGGATTACACATGGCATGGATGAGCTCTACAAATAA'}]
+        }
+        designs = []
+        # Design 1: Reporter construct
+        p, r, g, t = parts_db['promoters'][0], parts_db['rbs'][0], parts_db['reporters'][0], parts_db['terminators'][0]
+        designs.append({
+            'name': 'High-Expression GFP Reporter', 'description': 'A standard construct for testing gene expression levels.',
+            'parts': [{'part': 'Promoter', 'id': p['id'], 'length': len(p['sequence'])}, {'part': 'RBS', 'id': r['id'], 'length': len(r['sequence'])}, {'part': 'Reporter Gene', 'id': g['id'], 'length': len(g['sequence'])}, {'part': 'Terminator', 'id': t['id'], 'length': len(t['sequence'])}],
+            'total_length': sum(part['length'] for part in [p, r, g, t])
+        })
+        # Design 2: Regulate a native gene
+        if orfs:
+            designs.append({
+                'name': 'Inducible Control of Native Gene', 'description': f"Places the largest identified ORF (length {orfs[0]['length']} bp) under the control of the inducible pTet promoter.",
+                'parts': [{'part': 'Promoter', 'id': p['id'], 'length': len(p['sequence'])}, {'part': 'Native Gene', 'id': 'Largest ORF', 'length': orfs[0]['length']}, {'part': 'Terminator', 'id': t['id'], 'length': len(t['sequence'])}],
+                'total_length': p['length'] + orfs[0]['length'] + t['length']
+            })
+        return {'designs': designs}
+
     def generate_pdb_from_structure(self, protein_sequence: str, structure_sequence: str) -> str:
         """Generates a simulated PDB file string from a protein and its secondary structure."""
         pdb_lines = []
@@ -975,6 +1109,9 @@ def main():
                 microbiome_results = None
                 sv_results = None
                 comp_gen_results = None
+                folding_results = None
+                reg_network_results = None
+                synth_bio_results = None
                 selected_feature = st.session_state.get('selected_beta_feature', "Select a Beta Feature...")
                 if selected_feature.startswith("1."):
                     epigenetic_results = analyzer.epigenetic_analysis(sequence)
@@ -988,6 +1125,12 @@ def main():
                     sv_results = analyzer.detect_structural_variants(sequence)
                 elif selected_feature.startswith("6."):
                     comp_gen_results = analyzer.comparative_genomics(sequence)
+                elif selected_feature.startswith("7."):
+                    folding_results = analyzer.predict_3d_folding(sequence)
+                elif selected_feature.startswith("8."):
+                    reg_network_results = analyzer.infer_regulatory_network(sequence, orfs)
+                elif selected_feature.startswith("9."):
+                    synth_bio_results = analyzer.design_synthetic_circuits(sequence, orfs)
                 # Metrics for advanced tab
                 entropy = -sum(p * np.log2(p) for p in [sequence.count(n)/len(sequence) for n in 'ATCG'] if p > 0)
                 words_3 = [sequence[i:i+3] for i in range(len(sequence)-2)]
@@ -1464,6 +1607,112 @@ def main():
                             st.info("No significant homology found against the simulated database of common orthologs.")
                     else:
                         st.warning("Comparative genomics analysis could not be performed.")
+                
+                elif selected_feature.startswith("7."):
+                    # 3D Genome Folding Prediction
+                    if folding_results:
+                        st.subheader("🧊 3D Genome Folding Prediction (Simulated)")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.metric("Predicted TADs", folding_results['tads_found'])
+                            if folding_results['tads']:
+                                st.markdown("**Largest Predicted TADs:**")
+                                tad_df = pd.DataFrame(folding_results['tads'])
+                                st.dataframe(tad_df.head())
+                        with col2:
+                            st.metric("Predicted Enhancer-Promoter Loops", folding_results['loops_found'])
+                            if folding_results['loops']:
+                                st.markdown("**Strongest Predicted Loops:**")
+                                loop_df = pd.DataFrame(folding_results['loops'])
+                                st.dataframe(loop_df[['promoter_pos', 'enhancer_pos', 'distance', 'strength']].head().style.format({'strength': '{:.2f}'}))
+                        
+                        if folding_results['loops']:
+                            st.markdown("**Visualization of Predicted Chromatin Loops**")
+                            loop_df = pd.DataFrame(folding_results['loops'])
+                            fig_loops = go.Figure()
+                            # Draw loops as arcs
+                            for _, loop in loop_df.iterrows():
+                                start, end = sorted([loop['promoter_pos'], loop['enhancer_pos']])
+                                center = (start + end) / 2
+                                radius = (end - start) / 2
+                                theta = np.linspace(0, np.pi, 100)
+                                x_arc = center + radius * np.cos(theta)
+                                y_arc = radius * np.sin(theta) * 0.1 # scale height
+                                fig_loops.add_trace(go.Scatter(x=x_arc, y=y_arc, mode='lines', line=dict(color='purple', width=loop['strength']*2), hoverinfo='text', hovertext=f"Interaction<br>Distance: {loop['distance']} bp<br>Strength: {loop['strength']:.2f}"))
+                            fig_loops.update_layout(title="Predicted Long-Range Chromatin Interactions", xaxis_title="Genomic Position", yaxis_showticklabels=False, yaxis_zeroline=False, showlegend=False)
+                            st.plotly_chart(fig_loops, use_container_width=True, key=f'3d_folding_loops_{seq_idx}')
+                    else:
+                        st.warning("3D folding analysis could not be performed.")
+
+                elif selected_feature.startswith("8."):
+                    # Gene Regulatory Network Inference
+                    if reg_network_results:
+                        st.subheader("🕸️ Gene Regulatory Network Inference (Simulated)")
+                        regulations = reg_network_results['regulations']
+                        st.metric("Inferred Regulatory Links", len(regulations))
+
+                        if regulations:
+                            reg_df = pd.DataFrame(regulations)
+                            st.dataframe(reg_df.head())
+
+                            # Network Graph
+                            nodes = sorted(list(set(reg_df['tf'].tolist() + reg_df['target_gene'].tolist())))
+                            num_nodes = len(nodes)
+                            angle_step = 2 * np.pi / num_nodes
+                            positions = {node: (np.cos(i * angle_step), np.sin(i * angle_step)) for i, node in enumerate(nodes)}
+
+                            edge_x, edge_y = [], []
+                            for _, row in reg_df.iterrows():
+                                x0, y0 = positions[row['tf']]
+                                x1, y1 = positions[row['target_gene']]
+                                edge_x.extend([x0, x1, None])
+                                edge_y.extend([y0, y1, None])
+                            edge_trace = go.Scatter(x=edge_x, y=edge_y, line=dict(width=0.5, color='#888'), hoverinfo='none', mode='lines')
+
+                            node_x, node_y, node_text, node_color, node_size = [], [], [], [], []
+                            for node, pos in positions.items():
+                                x, y = pos; node_x.append(x); node_y.append(y); node_text.append(node)
+                                node_color.append('orange' if not node.startswith('ORF') else 'cyan')
+                                node_size.append(30 if not node.startswith('ORF') else 20)
+                            node_trace = go.Scatter(x=node_x, y=node_y, mode='markers+text', text=node_text, textposition="bottom center", hoverinfo='text', marker=dict(showscale=False, color=node_color, size=node_size, line_width=2))
+
+                            fig_net = go.Figure(data=[edge_trace, node_trace], layout=go.Layout(title='Inferred Gene Regulatory Network', showlegend=False, hovermode='closest', margin=dict(b=20,l=5,r=5,t=40), xaxis=dict(showgrid=False, zeroline=False, showticklabels=False), yaxis=dict(showgrid=False, zeroline=False, showticklabels=False)))
+                            st.plotly_chart(fig_net, use_container_width=True, key=f'regulatory_network_{seq_idx}')
+                        else:
+                            st.info("No regulatory links could be inferred from the known TFBS motifs.")
+                    else:
+                        st.warning("Regulatory network analysis could not be performed.")
+
+                elif selected_feature.startswith("9."):
+                    # Synthetic Biology Circuit Design
+                    if synth_bio_results:
+                        st.subheader("⚙️ Synthetic Biology Circuit Design")
+                        designs = synth_bio_results['designs']
+                        
+                        if designs:
+                            for i, design in enumerate(designs):
+                                with st.expander(f"Design {i+1}: {design['name']}", expanded=i==0):
+                                    st.markdown(f"**Description:** {design['description']}")
+                                    st.metric("Total Construct Length", f"{design['total_length']} bp")
+                                    
+                                    parts_df = pd.DataFrame(design['parts'])
+                                    
+                                    # Create Gantt chart data
+                                    gantt_data = []
+                                    current_pos = 0
+                                    for _, part_row in parts_df.iterrows():
+                                        gantt_data.append(dict(Task=part_row['part'], Start=current_pos, Finish=current_pos + part_row['length'], Resource=part_row['id']))
+                                        current_pos += part_row['length']
+                                    gantt_df = pd.DataFrame(gantt_data)
+                                    
+                                    fig_gantt = px.timeline(gantt_df, x_start="Start", x_end="Finish", y="Task", color="Task", title=f"Layout of '{design['name']}'", labels={"Task": "Genetic Part"}, hover_data=["Resource"])
+                                    fig_gantt.update_yaxes(autorange="reversed")
+                                    fig_gantt.update_layout(xaxis_title="Position (bp)")
+                                    st.plotly_chart(fig_gantt, use_container_width=True, key=f'synthetic_circuit_{seq_idx}_{i}')
+                        else:
+                            st.info("Could not generate any synthetic circuit designs for this sequence.")
+                    else:
+                        st.warning("Synthetic biology analysis could not be performed.")
                 
                 else:
                     # Preview for other features
