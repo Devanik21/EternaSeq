@@ -1043,7 +1043,7 @@ def main():
         ]
         
         st.selectbox(
-            "Choose a feature to run:",
+            "🧪 Choose a feature to run:",
             options=beta_features,
             key="selected_beta_feature"
         )
@@ -1053,7 +1053,7 @@ def main():
     st.header("📁 DNA Sequence Upload")
     
     uploaded_file = st.file_uploader(
-        "Upload DNA sequence file (e.g., chimpanzee.txt)",
+        "📤 Upload DNA sequence file (e.g., chimpanzee.txt)",
         type=['txt', 'fasta', 'fa', 'seq'],
         help="File format: sequence[tab]class (e.g., ATGCCC...	4)"
     )
