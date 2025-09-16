@@ -18,7 +18,7 @@ import streamlit.components.v1 as components
 
 # Configure page
 st.set_page_config(
-    page_title="🧬 EternaSeq - Revolutionary DNA Analyzer",
+    page_title="EternaSeq - Revolutionary DNA Analyzer",
     page_icon="🧬",
     layout="wide",
     initial_sidebar_state="expanded"
