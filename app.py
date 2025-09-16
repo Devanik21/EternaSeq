@@ -888,17 +888,28 @@ class DNAAnalyzer:
         designs = []
         # Design 1: Reporter construct
         p, r, g, t = parts_db['promoters'][0], parts_db['rbs'][0], parts_db['reporters'][0], parts_db['terminators'][0]
+        design1_parts = [
+            {'part': 'Promoter', 'id': p['id'], 'length': len(p['sequence'])},
+            {'part': 'RBS', 'id': r['id'], 'length': len(r['sequence'])},
+            {'part': 'Reporter Gene', 'id': g['id'], 'length': len(g['sequence'])},
+            {'part': 'Terminator', 'id': t['id'], 'length': len(t['sequence'])}
+        ]
         designs.append({
             'name': 'High-Expression GFP Reporter', 'description': 'A standard construct for testing gene expression levels.',
-            'parts': [{'part': 'Promoter', 'id': p['id'], 'length': len(p['sequence'])}, {'part': 'RBS', 'id': r['id'], 'length': len(r['sequence'])}, {'part': 'Reporter Gene', 'id': g['id'], 'length': len(g['sequence'])}, {'part': 'Terminator', 'id': t['id'], 'length': len(t['sequence'])}],
-            'total_length': sum(part['length'] for part in [p, r, g, t])
+            'parts': design1_parts,
+            'total_length': sum(part['length'] for part in design1_parts)
         })
         # Design 2: Regulate a native gene
         if orfs:
+            design2_parts = [
+                {'part': 'Promoter', 'id': p['id'], 'length': len(p['sequence'])},
+                {'part': 'Native Gene', 'id': 'Largest ORF', 'length': orfs[0]['length']},
+                {'part': 'Terminator', 'id': t['id'], 'length': len(t['sequence'])}
+            ]
             designs.append({
                 'name': 'Inducible Control of Native Gene', 'description': f"Places the largest identified ORF (length {orfs[0]['length']} bp) under the control of the inducible pTet promoter.",
-                'parts': [{'part': 'Promoter', 'id': p['id'], 'length': len(p['sequence'])}, {'part': 'Native Gene', 'id': 'Largest ORF', 'length': orfs[0]['length']}, {'part': 'Terminator', 'id': t['id'], 'length': len(t['sequence'])}],
-                'total_length': p['length'] + orfs[0]['length'] + t['length']
+                'parts': design2_parts,
+                'total_length': sum(part['length'] for part in design2_parts)
             })
         return {'designs': designs}
 
