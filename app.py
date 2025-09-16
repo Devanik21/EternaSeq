@@ -595,7 +595,7 @@ def render_3d_protein_structure(pdb_string: str, width: int = 500, height: int =
         components.html(str(html_output), height=int(height), width=int(width))
     else:
         st.warning("Could not generate a 3D visualization for this structure.")
-
+'''
 def get_gemini_insights(api_key: str, analysis_summary: Dict) -> List[str]:
     """Generate insights using Gemini AI"""
     if not api_key:
@@ -633,7 +633,7 @@ def get_gemini_insights(api_key: str, analysis_summary: Dict) -> List[str]:
     except Exception as e:
         st.error(f"Gemini API Error: {e}")
         return ["Could not generate AI insights. Please check your API key and network connection."]
-
+'''
 def main():
     # App header
     st.markdown("""
@@ -645,9 +645,9 @@ def main():
     """, unsafe_allow_html=True)
 
     # Sidebar for API Key
-    st.sidebar.header("💎 Gemini AI Integration")
+    '''st.sidebar.header("💎 Gemini AI Integration")
     api_key = st.sidebar.text_input("Enter your Google AI API Key", type="password", help="Get your key from https://aistudio.google.com/app/apikey")
-
+'''
     # File upload section
     st.header("📁 DNA Sequence Upload")
     
@@ -977,7 +977,7 @@ def main():
                         st.write("• Non-coding sequence")
                 
                 # Generate AI insights
-                st.subheader("🤖 AI-Generated Insights")
+               ''' st.subheader("🤖 AI-Generated Insights")
                 
                 with st.spinner("🧠 Consulting Gemini for deep insights..."):
                     # Prepare summary for Gemini
@@ -1007,7 +1007,7 @@ def main():
                     
                     insights = get_gemini_insights(api_key, analysis_summary)
                     for insight in insights:
-                        st.info(f"💡 {insight}")
+                        st.info(f"💡 {insight}")'''
 
             with tab7:
                 st.subheader("✂️ CRISPR/Cas9 Guide RNA Design")
@@ -1040,7 +1040,7 @@ def main():
                                    hover_data=['sequence'],
                                    labels={'location': 'Position on Sequence', 'overall_score': 'Overall Score'})
                     fig.update_layout(xaxis_range=[0, len(sequence)])
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, key=f'gNa_distribution_{seq_idx}')
                     
                     st.info("💡 **On-Target Score:** A heuristic score based on GC content and sequence features. Higher is better.  \n**Off-Target Hits:** Number of identical sequences found elsewhere. Lower is better.")
                     
