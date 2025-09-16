@@ -595,45 +595,7 @@ def render_3d_protein_structure(pdb_string: str, width: int = 500, height: int =
         components.html(str(html_output), height=int(height), width=int(width))
     else:
         st.warning("Could not generate a 3D visualization for this structure.")
-'''
-def get_gemini_insights(api_key: str, analysis_summary: Dict) -> List[str]:
-    """Generate insights using Gemini AI"""
-    if not api_key:
-        return ["Please enter a Google AI API Key in the sidebar to generate AI insights."]
-    
-    try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.5-flash-lite')
-        
-        # Create a detailed prompt
-        prompt = f"""
-        You are a world-class geneticist and bioinformatician. Analyze the following DNA sequence summary and provide 4-5 deep, insightful conclusions for a genomics researcher. Be concise, use scientific language, and format your output as a bulleted list (using '*' for bullets).
 
-        **Sequence Summary:**
-        - **Length:** {analysis_summary['length']} bp
-        - **GC Content:** {analysis_summary['gc_content']:.1f}%
-        - **Identified ORFs:** {analysis_summary['orfs_count']}
-        - **Largest ORF:** {analysis_summary['largest_orf_bp']} bp (protein: {analysis_summary['largest_orf_aa']} aa)
-        - **Potential Genes Found:** {analysis_summary['genes_found']}
-        - **Predicted Species:** {analysis_summary['predicted_species']} ({analysis_summary['species_confidence']:.0f}% confidence)
-        - **Evolutionary Conservation Score:** {analysis_summary['conservation_score']:.0f}/100 (Rate: {analysis_summary['evolutionary_rate']})
-        - **Pharmacogenomic Relevance:** {analysis_summary['pharma_score']}/100, Targets: {analysis_summary['pharma_targets']}
-        - **Shannon Entropy:** {analysis_summary['entropy']:.3f}
-
-        **Your Insights (as a bulleted list):**
-        """
-        
-        response = model.generate_content(prompt)
-        
-        # Clean up the response
-        insights = response.text.strip().split('\n')
-        cleaned_insights = [re.sub(r'^\s*[\*\-]\s*', '', i).strip() for i in insights if i.strip()]
-        return cleaned_insights
-
-    except Exception as e:
-        st.error(f"Gemini API Error: {e}")
-        return ["Could not generate AI insights. Please check your API key and network connection."]
-'''
 def main():
     # App header
     st.markdown("""
@@ -644,10 +606,7 @@ def main():
     </div>
     """, unsafe_allow_html=True)
 
-    # Sidebar for API Key
-    '''st.sidebar.header("💎 Gemini AI Integration")
-    api_key = st.sidebar.text_input("Enter your Google AI API Key", type="password", help="Get your key from https://aistudio.google.com/app/apikey")
-'''
+
     # File upload section
     st.header("📁 DNA Sequence Upload")
     
@@ -978,36 +937,8 @@ def main():
                 
                 # Generate AI insights
                # st.subheader("🤖 AI-Generated Insights")
-                '''
-                with st.spinner("🧠 Consulting Gemini for deep insights..."):
-                    # Prepare summary for Gemini
-                    top_species_name = "Unknown"
-                    top_species_prob = 0
-                    if species_scores:
-                        top_species_df = pd.DataFrame(list(species_scores.items()), columns=['Species', 'Probability']).sort_values('Probability', ascending=False)
-                        if not top_species_df.empty:
-                            top_species_name = top_species_df.iloc[0]['Species'].title()
-                            top_species_prob = top_species_df.iloc[0]['Probability'] * 100
+                
 
-                    analysis_summary = {
-                        'length': len(sequence),
-                        'gc_content': gc_content,
-                        'orfs_count': len(orfs),
-                        'largest_orf_bp': orfs[0]['length'] if orfs else 0,
-                        'largest_orf_aa': orfs[0]['protein_length'] if orfs else 0,
-                        'genes_found': ', '.join([g['name'] for g in genes_found]) if genes_found else 'None',
-                        'predicted_species': top_species_name,
-                        'species_confidence': top_species_prob,
-                        'conservation_score': evo_analysis['conservation_score'],
-                        'evolutionary_rate': evo_analysis['evolutionary_rate'],
-                        'pharma_score': pharma_analysis['pharmacogenomic_score'],
-                        'pharma_targets': ', '.join([t['target'] for t in pharma_analysis['drug_targets']]) if pharma_analysis['drug_targets'] else 'None',
-                        'entropy': entropy,
-                    }
-                    
-                    insights = get_gemini_insights(api_key, analysis_summary)
-                    for insight in insights:
-                        st.info(f"💡 {insight}")'''
 
             with tab7:
                 st.subheader("✂️ CRISPR/Cas9 Guide RNA Design")
