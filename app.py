@@ -1082,16 +1082,16 @@ def main():
         
         beta_features = [
             "Select a Beta Feature...",
-            "1. Epigenetic Analysis",
-            "2. Non-coding RNA Prediction",
-            "3. Viral Integration Site Detection",
-            "4. Microbiome Composition Analysis",
-            "5. Structural Variant Detection",
-            "6. Comparative Genomics",
-            "7. 3D Genome Folding Prediction",
-            "8. Gene Regulatory Network Inference",
-            "9. Synthetic Biology Circuit Design",
-            "10. AI-Powered Drug Discovery"
+            "Epigenetic Analysis",
+            "Non-coding RNA Prediction",
+            "Viral Integration Site Detection",
+            "Microbiome Composition Analysis",
+            "Structural Variant Detection",
+            "Comparative Genomics",
+            "3D Genome Folding Prediction",
+            "Gene Regulatory Network Inference",
+            "Synthetic Biology Circuit Design",
+            "AI-Powered Drug Discovery"
         ]
         
         st.selectbox(
@@ -1186,23 +1186,23 @@ def main():
                 reg_network_results = None
                 synth_bio_results = None
                 selected_feature = st.session_state.get('selected_beta_feature', "Select a Beta Feature...")
-                if selected_feature.startswith("1."):
+                if selected_feature == "Epigenetic Analysis":
                     epigenetic_results = analyzer.epigenetic_analysis(sequence)
-                elif selected_feature.startswith("2."):
+                elif selected_feature == "Non-coding RNA Prediction":
                     ncrna_results = analyzer.predict_non_coding_rna(sequence)
-                elif selected_feature.startswith("3."):
+                elif selected_feature == "Viral Integration Site Detection":
                     viral_results = analyzer.detect_viral_integration(sequence)
-                elif selected_feature.startswith("4."):
+                elif selected_feature == "Microbiome Composition Analysis":
                     microbiome_results = analyzer.microbiome_composition_analysis(sequence)
-                elif selected_feature.startswith("5."):
+                elif selected_feature == "Structural Variant Detection":
                     sv_results = analyzer.detect_structural_variants(sequence)
-                elif selected_feature.startswith("6."):
+                elif selected_feature == "Comparative Genomics":
                     comp_gen_results = analyzer.comparative_genomics(sequence)
-                elif selected_feature.startswith("7."):
+                elif selected_feature == "3D Genome Folding Prediction":
                     folding_results = analyzer.predict_3d_folding(sequence)
-                elif selected_feature.startswith("8."):
+                elif selected_feature == "Gene Regulatory Network Inference":
                     reg_network_results = analyzer.infer_regulatory_network(sequence, orfs)
-                elif selected_feature.startswith("9."):
+                elif selected_feature == "Synthetic Biology Circuit Design":
                     synth_bio_results = analyzer.design_synthetic_circuits(sequence, orfs)
                 # Metrics for advanced tab
                 entropy = -sum(p * np.log2(p) for p in [sequence.count(n)/len(sequence) for n in 'ATCG'] if p > 0)
@@ -1482,7 +1482,7 @@ def main():
                         st.write("• Non-coding sequence")
                 
                 # Generate AI insights
-               # st.subheader("✨ AI-Generated Insights")
+               # st.subheader("🤖 AI-Generated Insights")
                 
 
 
@@ -1527,11 +1527,11 @@ def main():
             # =================================================================
             # == Beta Features Section                                      ==
             # =================================================================
-            if selected_feature and selected_feature != "Select a Beta Feature..." and not selected_feature.startswith("10."):
+            if selected_feature and selected_feature != "Select a Beta Feature..." and selected_feature != "AI-Powered Drug Discovery":
                 st.markdown("---")
-                st.header(f"🔬 Beta Feature Analysis: {st.session_state.selected_beta_feature.split('.', 1)[1].strip()}")
+                st.header(f"🔬 Beta Feature Analysis: {selected_feature}")
                 
-                if selected_feature.startswith("1."):
+                if selected_feature == "Epigenetic Analysis":
                     # Epigenetic Analysis (Implemented)
                     if epigenetic_results:
                         st.subheader("🧬 Epigenetic Landscape")
@@ -1564,7 +1564,7 @@ def main():
                     else:
                         st.warning("Epigenetic analysis could not be performed.")
                 
-                elif selected_feature.startswith("2."):
+                elif selected_feature == "Non-coding RNA Prediction":
                     # Non-coding RNA Prediction
                     if ncrna_results:
                         st.subheader("🧬 Non-coding RNA (ncRNA) Prediction")
@@ -1601,7 +1601,7 @@ def main():
                     else:
                         st.warning("ncRNA analysis could not be performed.")
 
-                elif selected_feature.startswith("3."):
+                elif selected_feature == "Viral Integration Site Detection":
                     # Viral Integration Site Detection
                     if viral_results:
                         st.subheader("🦠 Viral Integration Site Detection")
@@ -1625,7 +1625,7 @@ def main():
                     else:
                         st.warning("Viral integration analysis could not be performed.")
                 
-                elif selected_feature.startswith("4."):
+                elif selected_feature == "Microbiome Composition Analysis":
                     # Microbiome Composition Analysis
                     if microbiome_results:
                         st.subheader("🦠 Microbiome Composition Analysis (Simulated)")
@@ -1648,7 +1648,7 @@ def main():
                     else:
                         st.warning("Microbiome analysis could not be performed.")
 
-                elif selected_feature.startswith("5."):
+                elif selected_feature == "Structural Variant Detection":
                     # Structural Variant Detection
                     if sv_results:
                         st.subheader("🧬 Structural Variant (SV) Detection")
@@ -1669,7 +1669,7 @@ def main():
                     else:
                         st.warning("Structural variant analysis could not be performed.")
 
-                elif selected_feature.startswith("6."):
+                elif selected_feature == "Comparative Genomics":
                     # Comparative Genomics
                     if comp_gen_results:
                         st.subheader("🌍 Comparative Genomics")
@@ -1694,7 +1694,7 @@ def main():
                     else:
                         st.warning("Comparative genomics analysis could not be performed.")
                 
-                elif selected_feature.startswith("7."):
+                elif selected_feature == "3D Genome Folding Prediction":
                     # 3D Genome Folding Prediction
                     if folding_results:
                         st.subheader("🧊 3D Genome Folding Prediction (Simulated)")
@@ -1730,7 +1730,7 @@ def main():
                     else:
                         st.warning("3D folding analysis could not be performed.")
 
-                elif selected_feature.startswith("8."):
+                elif selected_feature == "Gene Regulatory Network Inference":
                     # Gene Regulatory Network Inference
                     if reg_network_results:
                         st.subheader("🕸️ Gene Regulatory Network Inference (Simulated)")
@@ -1769,7 +1769,7 @@ def main():
                     else:
                         st.warning("Regulatory network analysis could not be performed.")
 
-                elif selected_feature.startswith("9."):
+                elif selected_feature == "Synthetic Biology Circuit Design":
                     # Synthetic Biology Circuit Design
                     if synth_bio_results:
                         st.subheader("⚙️ Synthetic Biology Circuit Design")
@@ -1803,7 +1803,7 @@ def main():
                 else:
                     # Preview for other features
                     st.info("This feature is currently in preview and not yet implemented.")
-                    feature_name = st.session_state.selected_beta_feature.split('.', 1)[1].strip()
+                    feature_name = selected_feature
                     st.markdown(f"**Coming Soon: {feature_name}**")
                     
                     preview_text = {
@@ -1824,12 +1824,12 @@ def main():
         # == Aggregate Beta Features (run once after all sequences)      ==
         # =================================================================
         selected_feature = st.session_state.get('selected_beta_feature', "Select a Beta Feature...")
-        if selected_feature.startswith("10."):
+        if selected_feature == "AI-Powered Drug Discovery":
             st.markdown("---")
-            st.header(f"🔬 Beta Feature Analysis: {selected_feature.split('.', 1)[1].strip()}")
+            st.header(f"🔬 Beta Feature Analysis: {selected_feature}")
             st.info("This feature provides a high-level summary and drug discovery hypotheses based on an analysis of **all** uploaded sequences.")
 
-            if st.button("✨ Generate AI-Powered Insights", key="generate_ai_insights"):
+            if st.button("🤖 Generate AI-Powered Insights", key="generate_ai_insights"):
                 api_key = st.session_state.get("google_api_key")
                 if not all_analyses_summary:
                     st.warning("No sequences were analyzed. Please upload data first.")
