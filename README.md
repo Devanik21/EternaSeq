@@ -45,7 +45,7 @@ EternaSeq transforms raw DNA sequences into actionable biological intelligence t
 
 ---
 
-## 🏗️ Technical Architecture
+## 🏗️ Technical Architecture(beta)
 
 ### Core Components
 ```
